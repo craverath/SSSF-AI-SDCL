@@ -42,7 +42,7 @@ agents:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `coding_agent` | `pi` \| `claude_code` | Which interface runs the agent. **v1 implements `pi` only**; `claude_code` is specced and stubbed in `agent_cc.py`, landing in v2. |
+| `coding_agent` | `pi` \| `claude_code` \| `codex` | Which interface runs the agent, resolved through `adw_modules/harnesses.py`. All three are implemented; see [Harnesses](#harnesses) below. |
 | `model` | string | Model id. For Pi, any id registered in `~/.pi/agent/models.json`. Default `gemini-3.6-flash`. |
 | `thinking` | enum | Reasoning effort — see below. Default `medium`. |
 | `color` | hex string | Lane color for every agent that does not set its own. Default empty — the visualizer falls back to its own palette. |
@@ -85,7 +85,61 @@ Pi's reasoning-effort ladder, lowest to highest:
 off | minimal | low | medium | high | xhigh | max
 ```
 
-Mapped to Pi's reasoning effort control and honored when the model is registered with `reasoning: true` in `~/.pi/agent/models.json`. On a non-reasoning model the setting is inert — no error, no effect. Rough guidance: `high`/`xhigh` for planners and reviewers, `medium` for builders, `low` for mechanical read-and-report agents. (For Claude Code in v2, the same field maps to the thinking budget.)
+For Pi, mapped to its reasoning effort control and honored when the model is registered with `reasoning: true` in `~/.pi/agent/models.json`. On a non-reasoning model the setting is inert — no error, no effect. Rough guidance: `high`/`xhigh` for planners and reviewers, `medium` for builders, `low` for mechanical read-and-report agents.
+
+For Claude Code the same value goes to `claude --effort`, but Claude Code's own accepted range is narrower than Pi's — `low | medium | high | xhigh | max` only, no `off`/`minimal`. `ClaudeCodeAdapter.validate()` rejects a `claude_code` agent set to `off` or `minimal` with an objective error at config-validation time, rather than letting the CLI reject it mid-run. For Codex the value goes to `-c model_reasoning_effort=<value>`; that CLI is not pre-validated the same way — an effort level the model doesn't support there is Codex's own problem to reject.
+
+## Harnesses
+
+`coding_agent` selects an adapter through `adw_modules/harnesses.py`'s registry — `agents.py` never branches on the CLI name itself, only on the common `HarnessAdapter` contract (`validate()`, `run()`). Three are implemented:
+
+| `coding_agent` | Adapter | CLI invocation | Session continuation |
+|---|---|---|---|
+| `pi` | `agent_pi.PiAdapter` | `pi -p --mode json` | `--session-id <id>` (creates or continues) |
+| `claude_code` | `agent_cc.ClaudeCodeAdapter` | `claude -p --output-format stream-json` | `--resume <uuid>`, once a real Claude Code session UUID exists |
+| `codex` | `agent_codex.CodexAdapter` | `codex exec --json` | `codex exec resume <thread_id> --json`, once a real Codex thread id exists |
+
+All three run through the exact same `agents.py` code path: one `HarnessRequest` per send, one `HarnessResult` back, gates/retries/permissions/tracing identical regardless of which adapter answered. A phase's JSON-fix and gate-correction retries always continue the id the adapter itself returned in `HarnessResult.session_id` — never a placeholder `agents.py` may have offered on the first send.
+
+**Session reuse in `agent_map.json`** requires `coding_agent`, `model`, AND permission class (`read_only`, true exactly when `writes: []`) to all match the mapped entry; changing any of them starts a fresh session rather than resuming one built under a different harness, model, or write/read-only class. The `read_only` check exists because `codex exec resume` cannot re-apply `--sandbox read-only` — a session that started writable must never be resumed once config says it should now be read-only, or it silently keeps the access it started with. An `agent_map.json` entry written before this field existed (no `read_only` key) is never trusted either way; it always starts fresh once.
+
+**`harness_engineering` is Pi-only.** It carries pi extension file paths (`pi -e <path>`); Claude Code and Codex have no equivalent wired up in this MVP. Setting it on a `claude_code` or `codex` agent fails `agents.validate()` with an objective error — it is never silently ignored or converted.
+
+**Credentials are never read or stored by SSSF.** Every adapter shells out to the CLI already logged in on the machine (`pi`, `claude`, `codex`) and relies entirely on that CLI's own auth state.
+
+A mixed roster — planner on Claude Code, builder and reviewer on Codex, everything else on Pi. The starter roster sets `defaults.tools` to Pi's seven tool names (see [Tools](#tools)); a `codex` agent that does not override `tools` would silently inherit that Pi-specific list, which `CodexAdapter.validate()` now rejects — `tools: null` is how a codex agent opts out and passes validation:
+
+```yaml
+agents:
+  - name: planner
+    coding_agent: claude_code
+    model: opus
+    thinking: xhigh
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/planner/system.md
+      user: adws/adw_data/prompt_engineering/planner/user.md
+
+  - name: builder
+    coding_agent: codex
+    model: gpt-5.6-sol
+    thinking: high
+    tools: null                    # Codex has no allowlist flag — opt out of defaults.tools explicitly
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/builder/system.md
+      user: adws/adw_data/prompt_engineering/builder/user.md
+
+  - name: reviewer
+    coding_agent: codex
+    model: gpt-5.6-sol
+    thinking: high
+    tools: null                    # same as builder — Codex agents always opt out
+    writes: []
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/reviewer/system.md
+      user: adws/adw_data/prompt_engineering/reviewer/user.md
+```
+
+The starter roster this skill installs stays on `coding_agent: pi` throughout — switch an agent to `claude_code` or `codex` once that CLI is installed and logged in.
 
 ## Model resolution
 
@@ -122,6 +176,21 @@ Other consequences worth knowing:
 `grep`, `find`, and `ls` are off in bare Pi, so an agent that does not name them will shell out through `bash` to do the same work. The starter roster therefore sets `defaults.tools` to all seven and lets each agent narrow from there.
 
 **Resolution order:** an agent's own `tools` list wins; an agent that omits the key inherits `defaults.tools`; if neither is set, `tools` stays `None` and all tools are usable. An empty list is not "all tools" — it is a tool-less agent, and it will stall.
+
+**On `coding_agent: claude_code`**, `tools` is translated through `agent_cc.TOOL_MAP` — a small, direct table, not a universal tool language:
+
+| Pi | Claude Code |
+|---|---|
+| `read` | `Read` |
+| `write` | `Write` |
+| `edit` | `Edit` |
+| `bash` | `Bash` |
+| `grep` | `Grep` |
+| `find` | `Glob` |
+
+`ls` has no Claude Code equivalent (directory listing goes through `Bash` or `Glob` there) and is deliberately unmapped — naming it for a `claude_code` agent fails `agents.validate()` with an objective error rather than being dropped or guessed at. The translated names are sent to `claude --tools` as ONE comma-joined argument (`"Read,Bash,Edit"`), matching the flag's own documented form — passing them as separate argv tokens is a real bug: `--tools` is variadic enough to also swallow the prompt that follows it as one more "tool name".
+
+**On `coding_agent: codex`**, `tools` has no CLI flag to map onto, and none is invented — instead of silently ignoring it, `agents.validate()` fails a codex agent whose effective `tools` (its own, or inherited from `defaults.tools`) isn't `None`. Set `tools: null` explicitly on a codex agent to opt out. Instead, an agent with `writes: []` (declared read-only) gets Codex's own `--sandbox read-only` on its first turn, as defense in depth alongside the `writes`/`protected_files` enforcement every coding_agent gets from `permissions.py` regardless. `codex exec resume` has no `--sandbox` flag, so a resumed turn can't re-assert it — agents.py's session-identity check (below) is what keeps this safe: a session mapped as writable is never resumed once the agent's `writes` says it should now be read-only, so that case always gets a fresh (sandboxable) thread instead.
 
 ## Write permissions — `writes` and `protected_files`
 

@@ -1,0 +1,120 @@
+"""Shared fixtures for the multi-harness adapter tests.
+
+Run with:
+    uv run --with pydantic --with pyyaml --with python-dotenv --with pytest \\
+        pytest .claude/skills/sssf/tests
+
+No test here calls a real model. Every adapter is exercised against
+fake_cli.py, a stand-in CLI driven by env vars (see fixtures/fake_cli.py).
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import threading
+from pathlib import Path
+from typing import Any, Callable
+
+import pytest
+
+TESTS_DIR = Path(__file__).resolve().parent
+ADWS_DIR = TESTS_DIR.parent / "templates" / "adws"
+FAKE_CLI = TESTS_DIR / "fixtures" / "fake_cli.py"
+
+if str(ADWS_DIR) not in sys.path:
+    sys.path.insert(0, str(ADWS_DIR))
+
+
+@pytest.fixture
+def fake_cli() -> Path:
+    return FAKE_CLI
+
+
+@pytest.fixture
+def fake_cli_env(tmp_path, monkeypatch):
+    """Wire FAKE_CLI_* env vars to files under tmp_path and return a small
+    controller: set_lines(jsonl_lines), set_exit(code), argv() -> list[str]."""
+    argv_file = tmp_path / "argv.json"
+    lines_file = tmp_path / "lines.jsonl"
+    monkeypatch.setenv("FAKE_CLI_ARGV_FILE", str(argv_file))
+    monkeypatch.setenv("FAKE_CLI_LINES_FILE", str(lines_file))
+    monkeypatch.setenv("FAKE_CLI_EXIT_CODE", "0")
+
+    class Controller:
+        def set_lines(self, lines: list[dict | str]) -> None:
+            lines_file.write_text("\n".join(
+                line if isinstance(line, str) else json.dumps(line) for line in lines) + "\n")
+
+        def set_exit(self, code: int) -> None:
+            monkeypatch.setenv("FAKE_CLI_EXIT_CODE", str(code))
+
+        def set_catalog(self, line: str) -> None:
+            monkeypatch.setenv("FAKE_PI_CATALOG", line)
+
+        def set_stderr_bytes(self, count: int) -> None:
+            """Have the fake CLI blast `count` bytes to stderr in one write,
+            right after its first stdout line — see fixtures/fake_cli.py."""
+            monkeypatch.setenv("FAKE_CLI_STDERR_BYTES", str(count))
+
+        def argv(self) -> list[str]:
+            return json.loads(argv_file.read_text())
+
+    return Controller()
+
+
+def call_with_timeout(fn: Callable[[], Any], timeout: float = 10.0) -> Any:
+    """Run `fn` on a daemon thread and fail loudly if it doesn't return in time.
+
+    Used for the stderr-pipe-deadlock regression tests: if the fix regresses,
+    the adapter call can hang forever. A plain call would then hang the whole
+    suite; joining a daemon thread with a timeout instead lets pytest report a
+    clear failure and exit — the stuck thread (and its blocked subprocess) is
+    abandoned, but it cannot keep the process alive since it is a daemon.
+    """
+    box: dict[str, Any] = {}
+
+    def target() -> None:
+        try:
+            box["result"] = fn()
+        except BaseException as error:  # noqa: BLE001 - re-raised on the caller's thread
+            box["error"] = error
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    thread.join(timeout)
+    if thread.is_alive():
+        pytest.fail(f"did not return within {timeout}s — likely a stderr-pipe deadlock")
+    if "error" in box:
+        raise box["error"]
+    return box["result"]
+
+
+@pytest.fixture
+def sssf_repo(tmp_path, monkeypatch):
+    """A throwaway git repo, checked out as cwd — what Run()/permissions.py expect.
+
+    No commit is made (and no identity configured for one): permissions.py only
+    needs `git` to recognize the directory as a repo. `git diff HEAD` on an
+    unborn HEAD degrades to empty output rather than raising (permissions._git
+    swallows the non-zero exit), and `git ls-files --others` works with zero
+    commits — both snapshot() building blocks are fine against a bare `git init`.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    monkeypatch.chdir(repo)
+    return repo
+
+
+@pytest.fixture
+def prompt_files(sssf_repo):
+    """Minimal system/user prompt templates an AgentConfig can point at."""
+    directory = sssf_repo / "prompt_engineering"
+    directory.mkdir(parents=True, exist_ok=True)
+    system = directory / "system.md"
+    user = directory / "user.md"
+    system.write_text("You are a test agent.")
+    user.write_text("{{prompt}}")
+    return system, user

@@ -303,7 +303,7 @@ class PromptEngineering(BaseModel):
 
 class AgentConfig(BaseModel):
     name: str
-    coding_agent: Literal["pi", "claude_code"] = "pi"
+    coding_agent: Literal["pi", "claude_code", "codex"] = "pi"
     model: str = "google/gemini-3.6-flash"
     thinking: str = "medium"        # off | minimal | low | medium | high | xhigh | max
     color: str = ""                 # hex swatch for this agent's lane in the UI
@@ -323,7 +323,7 @@ class AgentConfig(BaseModel):
 
 
 class ConfigDefaults(BaseModel):
-    coding_agent: Literal["pi", "claude_code"] = "pi"
+    coding_agent: Literal["pi", "claude_code", "codex"] = "pi"
     model: str = "google/gemini-3.6-flash"
     thinking: str = "medium"
     color: str = ""
@@ -368,21 +368,30 @@ class EventRecord(BaseModel):
     ended_at: Optional[str] = None
 
 
-# ── Pi coding agent interface ────────────────────────────────────────────────
+# ── Harness adapter contract ─────────────────────────────────────────────────
+# One request/result shape shared by every coding-agent adapter (pi, Claude
+# Code, Codex, ...). agents.py builds exactly one HarnessRequest per send and
+# hands it to whichever adapter harnesses.resolve(agent.coding_agent) returns
+# — it never inspects coding_agent itself beyond that one lookup.
 
-class PiRequest(BaseModel):
-    """Everything one non-interactive pi run needs."""
+class HarnessRequest(BaseModel):
+    """Everything one non-interactive coding-agent turn needs."""
 
     prompt: str
     system_prompt: str
-    model: str                      # registry pattern, resolved to provider + id
+    model: str                      # adapter-specific pattern (pi registry id, CC alias, ...)
     thinking: str = "medium"
-    session_id: str                 # pi --session-id: creates or continues
-    session_dir: str
-    raw_output_path: str            # JSONL stream lands here
-    tools: Optional[list[str]] = None
-    extensions: list[str] = Field(default_factory=list)
+    session_id: Optional[str] = None   # None = no prior session to continue
     cwd: str = "."                  # set from run.repo_root — the codebase root agents work in
+    raw_output_path: str            # the adapter's raw stdout stream lands here, verbatim
+    state_dir: str = ""             # adapter-owned on-disk session state, if it keeps one (pi)
+    tools: Optional[list[str]] = None
+    harness_engineering: list[str] = Field(default_factory=list)   # pi extensions; empty for CC/Codex
+    # True exactly when agent.writes == [] (declared read-only). The one piece
+    # of permissions-shaped info an adapter may use to pick a NATIVE read-only
+    # sandbox as defense in depth (currently: Codex). permissions.enforce()
+    # still runs after every call regardless — this never replaces it.
+    read_only: bool = False
 
 
 class UsageBreakdown(BaseModel):
@@ -433,15 +442,17 @@ class UsageBreakdown(BaseModel):
             setattr(self, field, getattr(self, field) + getattr(other, field))
 
 
-class PiResult(BaseModel):
+class HarnessResult(BaseModel):
     text: str = ""
     returncode: int = 0
+    # The REAL session id the adapter used or was assigned — never the
+    # placeholder agents.py may have offered in the request. agents.py adopts
+    # this value for retries and for agent_map.json; it must not fall back to
+    # its own pre-generated id once a real one comes back.
     session_id: str = ""
-    tokens: int = 0
-    cost: float = 0.0
     usage: UsageBreakdown = Field(default_factory=UsageBreakdown)
-    # Context occupancy after the LAST turn — not a sum. `tokens` bills every
-    # turn; this is how full the window is right now, which is what the
-    # visualizer's context bar measures against `context_window`.
+    # Context occupancy after the LAST turn — not a sum. usage.total_tokens
+    # bills every turn; this is how full the window is right now, which is
+    # what the visualizer's context bar measures against `context_window`.
     context_tokens: int = 0
-    context_window: int = 0         # 0 when the registry declares no ceiling
+    context_window: int = 0         # 0 when the adapter can't report a ceiling

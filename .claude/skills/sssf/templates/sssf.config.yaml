@@ -1,5 +1,7 @@
 # sssf.config.yaml — the factory's agent roster. One agent, one prompt, one purpose.
-# v1 runs the Pi coding agent only; coding_agent: claude_code arrives in v2.
+# coding_agent per agent: pi | claude_code | codex. harness_engineering (pi
+# extensions) is Pi-only — set it on a claude_code/codex agent and validation
+# fails. See references/config.md for the full picture.
 defaults:
   coding_agent: pi
   model: google/gemini-3.6-flash   # provider/id — a bare pattern is ambiguous across providers
