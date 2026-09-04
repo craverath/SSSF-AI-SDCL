@@ -73,4 +73,4 @@ Deep specs, when needed: [references/config.md](references/config.md) · [refere
 
 ## v1 scope
 
-The starter roster defaults to Claude Code Sonnet, with the reviewer on Codex GPT-5.6 Terra. `pi`, `claude_code`, and `codex` are all implemented and selectable per agent — see `references/config.md#harnesses`. `harness_engineering` (Pi extensions) stays Pi-only; setting it on a `claude_code`/`codex` agent fails validation. The visualizer app ships in a later pass — observe via sqlite queries until then.
+The starter roster defaults to Claude Code Sonnet, with the reviewer on Codex GPT-5.6 Terra. `pi`, `claude_code`, `codex`, `kiro_cli`, and `antigravity` are all implemented and selectable per agent — see `references/config.md#harnesses`. `harness_engineering` (Pi extensions) stays Pi-only; setting it on any other harness fails validation. `tools:` is only honored by `pi` and `claude_code`: `codex`, `kiro_cli`, and `antigravity` have no allowlist flag to map onto, so they require `tools: null` and rely on `permissions.py` for the boundary. The visualizer app ships in a later pass — observe via sqlite queries until then.

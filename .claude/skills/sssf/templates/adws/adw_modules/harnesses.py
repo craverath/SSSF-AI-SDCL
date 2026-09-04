@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from typing import Callable, Optional, Protocol
 
+from .agent_antigravity import AntigravityAdapter
 from .agent_claudecode import ClaudeCodeAdapter
 from .agent_codex import CodexAdapter
+from .agent_kirocli import KiroCliAdapter
 from .agent_pi import PiAdapter
 from .data_types import AgentConfig, HarnessRequest, HarnessResult
 
@@ -40,6 +42,8 @@ ADAPTERS: dict[str, HarnessAdapter] = {
     "pi": PiAdapter(),
     "claude_code": ClaudeCodeAdapter(),
     "codex": CodexAdapter(),
+    "kiro_cli": KiroCliAdapter(),
+    "antigravity": AntigravityAdapter(),
 }
 
 

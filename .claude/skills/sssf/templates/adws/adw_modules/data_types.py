@@ -301,9 +301,14 @@ class PromptEngineering(BaseModel):
     user: str                       # path to user.md
 
 
+# Every key in harnesses.ADAPTERS. Declared once so the defaults and the
+# per-agent field cannot drift apart when an adapter is added.
+CodingAgent = Literal["pi", "claude_code", "codex", "kiro_cli", "antigravity"]
+
+
 class AgentConfig(BaseModel):
     name: str
-    coding_agent: Literal["pi", "claude_code", "codex"] = "claude_code"
+    coding_agent: CodingAgent = "claude_code"
     model: str = "sonnet"
     thinking: str = "medium"        # off | minimal | low | medium | high | xhigh | max
     color: str = ""                 # hex swatch for this agent's lane in the UI
@@ -323,7 +328,7 @@ class AgentConfig(BaseModel):
 
 
 class ConfigDefaults(BaseModel):
-    coding_agent: Literal["pi", "claude_code", "codex"] = "claude_code"
+    coding_agent: CodingAgent = "claude_code"
     model: str = "sonnet"
     thinking: str = "medium"
     color: str = ""
