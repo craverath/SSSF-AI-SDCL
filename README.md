@@ -73,7 +73,13 @@ just obs                   # the trace UI, needs bun
 uv run adws/adw_prompt.py "reply with a one-line summary of this repo" --agent scout
 ```
 
-`--integration codex` installs the repo-local skill at `.agents/skills/sssf`, where Codex exposes it as `$sssf`. `--integration claude` installs it at `.claude/skills/sssf`, where Claude Code exposes it as `/sssf`. `none` installs only the factory.
+`--integration codex` installs the repo-local skills at `.agents/skills/`, where Codex exposes them as `$sssf` and `$sssf-grill-me`. `--integration claude` installs them at `.claude/skills/`, where Claude Code exposes them as `/sssf` and `/sssf-grill-me`. `none` installs only the factory.
+
+Use `sssf-grill-me` when the initial request still needs product decisions. It inspects the relevant code, interviews the developer, and writes an approved `specs/YYYY-MM-DD-<slug>.md` without changing the application. Its instructions use only capabilities shared by coding harnesses, so the output contract is the same with Claude Code or Codex. That file is accepted directly by the full workflow:
+
+```bash
+just simple-sdlc specs/YYYY-MM-DD-<slug>.md
+```
 
 Re-running `install.py` is safe. It preserves existing files, applies only narrowly defined migrations for obsolete generated paths, and reports what it skipped. `--force` refreshes stamped code and the selected integration, but it overwrites **all** stamped files including your `sssf.config.yaml` and your prompts, so commit first.
 
@@ -108,7 +114,7 @@ There are three actors here, and the design keeps them separate on purpose: **th
   <img src="images/03_skill_stamp.svg" alt="The sssf skill directory on the left stamping config, adws, and prompt_engineering into three different target repos" width="780">
 </p>
 
-The same skill content is installed at `.claude/skills/sssf/` for Claude Code or `.agents/skills/sssf/` for Codex. `SKILL.md` carries the hard rules and routes each request to one of nine cookbooks. `references/` holds the deep specs, `scripts/` holds the generators, and `templates/` holds exactly what gets stamped.
+The same skill content is installed at `.claude/skills/sssf/` for Claude Code or `.agents/skills/sssf/` for Codex. The harness-neutral companion `sssf-grill-me` skill is installed beside it to turn ambiguous requests into approved specifications before a workflow starts. SSSF's `SKILL.md` carries the hard rules and routes each request to one of nine cookbooks. `references/` holds the deep specs, `scripts/` holds the generators, and `templates/` holds exactly what gets stamped.
 
 | What lands in your repo | Where it comes from | Tracked |
 |---|---|---|
@@ -275,19 +281,21 @@ It resolves its target through `--db`, then `SSSF_DB`, then `<cwd>/adws/adw_data
 ```
 super-simple-software-factory/          # the deployable factory, and nothing else
 ├── install.py                          # host-neutral installer entry point
-└── .claude/skills/sssf/                # canonical skill source
-    ├── SKILL.md                        # hard rules + request routing table
-    ├── cookbooks/                      # 9 orchestrator playbooks, loaded lazily
-    ├── references/                     # config / handoff / observability specs
-    ├── scripts/                        # install.py, make_config.py, make_adw.py
-    ├── apps/visualizer/                # the read-only trace UI (Vue + Vite on Bun)
-    └── templates/                      # EXACTLY what install.py stamps
-        ├── sssf.config.yaml            # the starter roster
-        ├── prompt_engineering/{agent}/ # system.md + user.md per agent
-        ├── harness_engineering/        # pi extensions
-        └── adws/
-            ├── adw_*.py                # the twelve starter workflows
-            └── adw_modules/            # ALL low-level logic, ADW scripts stay thin
+└── .claude/skills/
+    ├── sssf-grill-me/SKILL.md           # harness-neutral interview + SSSF spec
+    └── sssf/                            # canonical factory skill source
+        ├── SKILL.md                        # hard rules + request routing table
+        ├── cookbooks/                      # 9 orchestrator playbooks, loaded lazily
+        ├── references/                     # config / handoff / observability specs
+        ├── scripts/                        # install.py, make_config.py, make_adw.py
+        ├── apps/visualizer/                # the read-only trace UI (Vue + Vite on Bun)
+        └── templates/                      # EXACTLY what install.py stamps
+            ├── sssf.config.yaml            # the starter roster
+            ├── prompt_engineering/{agent}/ # system.md + user.md per agent
+            ├── harness_engineering/        # pi extensions
+            └── adws/
+                ├── adw_*.py                # the twelve starter workflows
+                └── adw_modules/            # ALL low-level logic, ADW scripts stay thin
 ```
 
 The skill is also what an agent reads to *operate* the factory. `SKILL.md` is the central idea, and the cookbooks are lazily loaded recipes it pulls in one at a time: set up the factory, create an ADW, modify a chain, add an agent, run and monitor. If you can teach an agent to do something, teach it, then go build the thing it cannot.

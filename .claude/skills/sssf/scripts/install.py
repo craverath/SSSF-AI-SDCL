@@ -26,6 +26,8 @@ INTEGRATION_PATHS = {
     "codex": Path(".agents/skills/sssf"),
 }
 
+COMPANION_SKILLS = ("sssf-grill-me",)
+
 IGNORED_SOURCE_NAMES = {
     "__pycache__",
     "node_modules",
@@ -121,9 +123,15 @@ def install_integration(
         return
 
     destination = (root / INTEGRATION_PATHS[integration]).resolve()
-    if SKILL_ROOT == destination:
-        return
-    stamp(SKILL_ROOT, destination, force, stamped, skipped)
+    if SKILL_ROOT != destination:
+        stamp(SKILL_ROOT, destination, force, stamped, skipped)
+
+    integration_root = destination.parent
+    for skill_name in COMPANION_SKILLS:
+        source = SKILL_ROOT.parent / skill_name
+        companion_destination = integration_root / skill_name
+        if source.resolve() != companion_destination.resolve():
+            stamp(source, companion_destination, force, stamped, skipped)
 
 
 def main() -> int:

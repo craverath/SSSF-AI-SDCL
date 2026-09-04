@@ -6,16 +6,27 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = REPO_ROOT / "install.py"
+GRILL_SKILL = REPO_ROOT / ".claude/skills/sssf-grill-me/SKILL.md"
 
 
 @pytest.mark.parametrize(
-    ("integration", "skill_path"),
+    ("integration", "skill_path", "grill_skill_path"),
     [
-        ("claude", Path(".claude/skills/sssf")),
-        ("codex", Path(".agents/skills/sssf")),
+        (
+            "claude",
+            Path(".claude/skills/sssf"),
+            Path(".claude/skills/sssf-grill-me"),
+        ),
+        (
+            "codex",
+            Path(".agents/skills/sssf"),
+            Path(".agents/skills/sssf-grill-me"),
+        ),
     ],
 )
-def test_installs_selected_integration(tmp_path, integration, skill_path):
+def test_installs_selected_integration(
+    tmp_path, integration, skill_path, grill_skill_path
+):
     result = subprocess.run(
         [sys.executable, str(INSTALLER), "--integration", integration],
         cwd=tmp_path,
@@ -26,6 +37,8 @@ def test_installs_selected_integration(tmp_path, integration, skill_path):
 
     assert f"integration: {integration}" in result.stdout
     assert (tmp_path / skill_path / "SKILL.md").is_file()
+    installed_grill_skill = tmp_path / grill_skill_path / "SKILL.md"
+    assert installed_grill_skill.read_text() == GRILL_SKILL.read_text()
     assert not (tmp_path / skill_path / "apps/visualizer/node_modules").exists()
     assert not (tmp_path / skill_path / "apps/visualizer/dist").exists()
     assert (tmp_path / "adws/adw_modules/harnesses.py").is_file()
