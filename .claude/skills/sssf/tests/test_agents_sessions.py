@@ -126,15 +126,17 @@ def test_session_not_reused_across_different_coding_agents(sssf_repo, prompt_fil
         ph.call(AgentCall(output_type=GenericOutput, prompt="hi", gates=[]))
     assert run.agent_map["tester"]["coding_agent"] == "pi"
 
-    cc_stub = ScriptedAdapter([
-        (None, HarnessResult(text='{"status": "success"}', returncode=0, session_id="cc-session")),
+    claudecode_stub = ScriptedAdapter([
+        (None, HarnessResult(
+            text='{"status": "success"}', returncode=0, session_id="claudecode-session"
+        )),
     ])
-    monkeypatch.setitem(harnesses.ADAPTERS, "claude_code", cc_stub)
+    monkeypatch.setitem(harnesses.ADAPTERS, "claude_code", claudecode_stub)
     cfg.agents[0].coding_agent = "claude_code"
     with run.phase(PhaseParams(name="second", kind="agent", owner="tester",
                                description="switched to claude_code, must not reuse pi's session")) as ph:
         ph.call(AgentCall(output_type=GenericOutput, prompt="hi again", gates=[]))
-    assert cc_stub.seen_session_ids[-1] != real_id
+    assert claudecode_stub.seen_session_ids[-1] != real_id
     assert run.agent_map["tester"]["coding_agent"] == "claude_code"
 
 

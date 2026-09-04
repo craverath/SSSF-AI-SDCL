@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from adw_modules import agents, harnesses
-from adw_modules.agent_cc import ClaudeCodeAdapter
+from adw_modules.agent_claudecode import ClaudeCodeAdapter
 from adw_modules.agent_codex import CodexAdapter
 from adw_modules.agent_pi import PiAdapter
 

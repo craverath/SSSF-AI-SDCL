@@ -15,7 +15,7 @@ import shutil
 import uuid
 
 import pytest
-from adw_modules import agent_cc, agent_codex, agent_pi
+from adw_modules import agent_claudecode, agent_codex, agent_pi
 from adw_modules.data_types import HarnessRequest
 
 pytestmark = pytest.mark.skipif(
@@ -41,7 +41,7 @@ def test_pi_smoke(tmp_path):
 
 @pytest.mark.skipif(not shutil.which("claude"), reason="claude CLI not on PATH")
 def test_claude_code_smoke(tmp_path):
-    result = agent_cc.ClaudeCodeAdapter().run(_request(tmp_path, "haiku"))
+    result = agent_claudecode.ClaudeCodeAdapter().run(_request(tmp_path, "haiku"))
     assert result.text.strip()
 
 

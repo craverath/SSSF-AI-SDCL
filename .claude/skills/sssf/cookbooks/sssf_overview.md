@@ -24,7 +24,7 @@ adws/
 │   ├── agents.py                load_config, validate, resolve entry → interface + model + thinking
 │   ├── runner.py                the Run object: run.phase(PhaseParams) → ph.call(AgentCall)
 │   ├── harnesses.py              adapter registry: coding_agent -> pi | claude_code | codex
-│   ├── agent_pi.py, agent_cc.py, agent_codex.py    one adapter per coding_agent
+│   ├── agent_pi.py, agent_claudecode.py, agent_codex.py    one adapter per coding_agent
 │   ├── gates.py                 gate(envelope, run) -> GateReport — one check per item verified
 │   ├── changes.py               git diff vs a resolved base → ChangeSet → envelope for the documenter
 │   ├── prompts.py, session.py, tracer.py, console.py, git_helper.py, utils.py

@@ -99,7 +99,7 @@ For Claude Code the same value goes to `claude --effort`, but Claude Code's own 
 | `coding_agent` | Adapter | CLI invocation | Session continuation |
 |---|---|---|---|
 | `pi` | `agent_pi.PiAdapter` | `pi -p --mode json` | `--session-id <id>` (creates or continues) |
-| `claude_code` | `agent_cc.ClaudeCodeAdapter` | `claude -p --output-format stream-json` | `--resume <uuid>`, once a real Claude Code session UUID exists |
+| `claude_code` | `agent_claudecode.ClaudeCodeAdapter` | `claude -p --output-format stream-json` | `--resume <uuid>`, once a real Claude Code session UUID exists |
 | `codex` | `agent_codex.CodexAdapter` | `codex exec --json` | `codex exec resume <thread_id> --json`, once a real Codex thread id exists |
 
 All three run through the exact same `agents.py` code path: one `HarnessRequest` per send, one `HarnessResult` back, gates/retries/permissions/tracing identical regardless of which adapter answered. A phase's JSON-fix and gate-correction retries always continue the id the adapter itself returned in `HarnessResult.session_id` — never a placeholder `agents.py` may have offered on the first send.
@@ -169,7 +169,7 @@ For Pi, `tools` maps to `pi --tools`. Pi's seven builtin tool names are:
 
 **Resolution order:** an agent's own `tools` list wins; an agent that omits the key inherits `defaults.tools`; if neither is set, `tools` stays `None` and all tools are usable. An empty list is not "all tools" — it is a tool-less agent, and it will stall.
 
-**On `coding_agent: claude_code`**, `tools` is translated through `agent_cc.TOOL_MAP` — a small, direct table, not a universal tool language:
+**On `coding_agent: claude_code`**, `tools` is translated through `agent_claudecode.TOOL_MAP` — a small, direct table, not a universal tool language:
 
 | Pi | Claude Code |
 |---|---|

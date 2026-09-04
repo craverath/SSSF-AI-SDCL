@@ -15,7 +15,7 @@ Extend `adws/adw_modules/` with new low-level logic.
 | `harnesses.py` | the `HarnessAdapter` Protocol and the `ADAPTERS` registry (`pi` / `claude_code` / `codex` → adapter instance) |
 | `runner.py` | the `Run` object; `run.phase(PhaseParams)` context manager; `ph.call(AgentCall)` |
 | `agent_pi.py` | the Pi adapter — non-interactive `pi -p --mode json`, JSONL stream tailed live, model resolved against `~/.pi/agent/models.json`; `--session-id` creates-or-continues, so running and continuing an agent are the same call |
-| `agent_cc.py` | the Claude Code adapter — `claude -p --output-format stream-json`, `--resume <uuid>` to continue a real session |
+| `agent_claudecode.py` | the Claude Code adapter — `claude -p --output-format stream-json`, `--resume <uuid>` to continue a real session |
 | `agent_codex.py` | the Codex adapter — `codex exec --json`, `codex exec resume <thread_id> --json` to continue |
 | `gates.py` | validation gates over envelope claims |
 | `changes.py` | deterministic change capture: resolve the base ref, `git diff` into `context_handoff/changes.diff`, adapt the `ChangeSet` into an envelope an agent can be handed |

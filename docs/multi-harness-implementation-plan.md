@@ -160,7 +160,7 @@ Esses testes protegem a refatoração sem ampliar comportamento.
 
 ### 3. Implementar Claude Code
 
-Criar `ClaudeCodeAdapter` em `agent_cc.py` usando:
+Criar `ClaudeCodeAdapter` em `agent_claudecode.py` usando:
 
 - `claude -p` para execução não interativa;
 - `--model` para o modelo;
@@ -283,7 +283,7 @@ manualmente.
 | `data_types.py` | Tipos comuns e novos valores de `coding_agent` |
 | `harnesses.py` | Interface e registry |
 | `agent_pi.py` | Adapter do comportamento atual |
-| `agent_cc.py` | Adapter do Claude Code |
+| `agent_claudecode.py` | Adapter do Claude Code |
 | `agent_codex.py` | Adapter do Codex |
 | `agents.py` | Resolução e chamada pelo contrato comum |
 | `sssf.config.yaml` | Exemplo de configuração mista |

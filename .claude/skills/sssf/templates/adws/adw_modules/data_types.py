@@ -379,14 +379,14 @@ class HarnessRequest(BaseModel):
 
     prompt: str
     system_prompt: str
-    model: str                      # adapter-specific pattern (pi registry id, CC alias, ...)
+    model: str                      # adapter-specific pattern (pi registry id, Claude Code alias, ...)
     thinking: str = "medium"
     session_id: Optional[str] = None   # None = no prior session to continue
     cwd: str = "."                  # set from run.repo_root — the codebase root agents work in
     raw_output_path: str            # the adapter's raw stdout stream lands here, verbatim
     state_dir: str = ""             # adapter-owned on-disk session state, if it keeps one (pi)
     tools: Optional[list[str]] = None
-    harness_engineering: list[str] = Field(default_factory=list)   # pi extensions; empty for CC/Codex
+    harness_engineering: list[str] = Field(default_factory=list)   # pi extensions; empty for Claude Code/Codex
     # True exactly when agent.writes == [] (declared read-only). The one piece
     # of permissions-shaped info an adapter may use to pick a NATIVE read-only
     # sandbox as defense in depth (currently: Codex). permissions.enforce()

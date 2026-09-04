@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Callable, Optional, Protocol
 
-from .agent_cc import ClaudeCodeAdapter
+from .agent_claudecode import ClaudeCodeAdapter
 from .agent_codex import CodexAdapter
 from .agent_pi import PiAdapter
 from .data_types import AgentConfig, HarnessRequest, HarnessResult

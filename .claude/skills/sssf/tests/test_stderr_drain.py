@@ -13,7 +13,7 @@ the test fails fast instead of hanging the suite.
 from __future__ import annotations
 
 import pytest
-from adw_modules import agent_cc, agent_codex, agent_pi
+from adw_modules import agent_claudecode, agent_codex, agent_pi
 from adw_modules.data_types import HarnessRequest
 from conftest import call_with_timeout
 
@@ -33,7 +33,7 @@ PI_LINES = [
      "usage": {"totalTokens": 1}, "stopReason": "stop"}},
 ]
 
-CC_LINES = [
+CLAUDECODE_LINES = [
     {"type": "system", "subtype": "init", "session_id": "11111111-1111-1111-1111-111111111111"},
     {"type": "result", "subtype": "success", "is_error": False,
      "session_id": "11111111-1111-1111-1111-111111111111", "result": "FINAL_TEXT",
@@ -75,14 +75,16 @@ def test_pi_drains_stderr_without_deadlock(tmp_path, fake_cli, fake_cli_env, mon
 
 
 def test_claude_code_drains_stderr_without_deadlock(tmp_path, fake_cli, fake_cli_env, monkeypatch):
-    monkeypatch.setattr(agent_cc, "CLAUDE_PATH", str(fake_cli))
-    fake_cli_env.set_lines(CC_LINES)
+    monkeypatch.setattr(agent_claudecode, "CLAUDE_PATH", str(fake_cli))
+    fake_cli_env.set_lines(CLAUDECODE_LINES)
     fake_cli_env.set_stderr_bytes(STDERR_BYTES)
     request = HarnessRequest(
         prompt="do the thing", system_prompt="sys", model="opus", thinking="high",
         cwd=str(tmp_path), raw_output_path=str(tmp_path / "raw.jsonl"))
 
-    result = call_with_timeout(lambda: agent_cc.ClaudeCodeAdapter().run(request), DEADLOCK_TIMEOUT)
+    result = call_with_timeout(
+        lambda: agent_claudecode.ClaudeCodeAdapter().run(request), DEADLOCK_TIMEOUT
+    )
     assert result.text == "FINAL_TEXT"
     assert result.returncode == 0
 
