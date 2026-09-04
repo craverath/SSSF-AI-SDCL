@@ -74,9 +74,13 @@ just obs                   # the trace UI, needs bun
 uv run adws/adw_prompt.py "reply with a one-line summary of this repo" --agent scout
 ```
 
-`--integration codex` installs the repo-local skills at `.agents/skills/`, where Codex exposes them as `$sssf` and `$sssf-grill-me`. `--integration claude` installs them at `.claude/skills/`, where Claude Code exposes them as `/sssf` and `/sssf-grill-me`. `--integration kiro` installs them at `.kiro/skills/`, where Kiro CLI exposes them as `/sssf` and `/sssf-grill-me` — its default agent already carries `skill://.kiro/skills/*/SKILL.md`, so nothing needs configuring. `none` installs only the factory.
+`--integration codex` installs the repo-local skills at `.agents/skills/`, where Codex exposes them as `$sssf`, `$sssf-grill-me`, and `$sssf-pick-models`. `--integration claude` installs them at `.claude/skills/`, where Claude Code exposes them as `/sssf`, `/sssf-grill-me`, and `/sssf-pick-models`. `--integration kiro` installs them at `.kiro/skills/`, where Kiro CLI exposes the same three — its default agent already carries `skill://.kiro/skills/*/SKILL.md`, so nothing needs configuring. `none` installs only the factory.
 
-Use `sssf-grill-me` when the initial request still needs product decisions. It inspects the relevant code, interviews the developer, and writes an approved `specs/YYYY-MM-DD-<slug>.md` without changing the application. Its instructions use only capabilities shared by coding harnesses, so the output contract is the same with Claude Code or Codex. The full workflow accepts either an inline prompt or a specification path:
+Use `sssf-grill-me` when the initial request still needs product decisions. It inspects the relevant code, interviews the developer, and writes an approved `specs/YYYY-MM-DD-<slug>.md` without changing the application. Its instructions use only capabilities shared by coding harnesses, so the output contract is the same with Claude Code or Codex.
+
+Use `sssf-pick-models` right after installing, to decide which harness and model runs each agent. It carries the model tables for all five harnesses, shows what each role is actually buying, and writes the result into `sssf.config.yaml` with the keys a harness switch forces — the `tools: null` that codex, kiro_cli, and antigravity all require, which is what makes a hand edit fail `agents.validate()`.
+
+The full workflow accepts either an inline prompt or a specification path:
 
 ```bash
 just sssf "add a /health endpoint"
@@ -116,7 +120,7 @@ There are three actors here, and the design keeps them separate on purpose: **th
   <img src="images/03_skill_stamp.svg" alt="The sssf skill directory on the left stamping config, adws, and prompt_engineering into three different target repos" width="780">
 </p>
 
-The same skill content is installed at `.claude/skills/sssf/` for Claude Code, `.agents/skills/sssf/` for Codex, or `.kiro/skills/sssf/` for Kiro CLI. The harness-neutral companion `sssf-grill-me` skill is installed beside it to turn ambiguous requests into approved specifications before a workflow starts. SSSF's `SKILL.md` carries the hard rules and routes each request to one of nine cookbooks. `references/` holds the deep specs, `scripts/` holds the generators, and `templates/` holds exactly what gets stamped.
+The same skill content is installed at `.claude/skills/sssf/` for Claude Code, `.agents/skills/sssf/` for Codex, or `.kiro/skills/sssf/` for Kiro CLI. Two harness-neutral companions are installed beside it: `sssf-grill-me`, which turns ambiguous requests into approved specifications before a workflow starts, and `sssf-pick-models`, which assigns a harness and model to each agent in the roster. SSSF's `SKILL.md` carries the hard rules and routes each request to one of nine cookbooks. `references/` holds the deep specs, `scripts/` holds the generators, and `templates/` holds exactly what gets stamped.
 
 | What lands in your repo | Where it comes from | Tracked |
 |---|---|---|
@@ -286,6 +290,7 @@ super-simple-software-factory/          # the deployable factory, and nothing el
 ├── install.py                          # host-neutral installer entry point
 └── .claude/skills/
     ├── sssf-grill-me/SKILL.md           # harness-neutral interview + SSSF spec
+    ├── sssf-pick-models/SKILL.md        # harness + model per agent, written into the roster
     └── sssf/                            # canonical factory skill source
         ├── SKILL.md                        # hard rules + request routing table
         ├── cookbooks/                      # 9 orchestrator playbooks, loaded lazily

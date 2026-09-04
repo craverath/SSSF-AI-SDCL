@@ -7,7 +7,6 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = REPO_ROOT / "install.py"
-GRILL_SKILL = REPO_ROOT / ".claude/skills/sssf-grill-me/SKILL.md"
 
 
 def load_installer():
@@ -21,28 +20,14 @@ def load_installer():
 
 
 @pytest.mark.parametrize(
-    ("integration", "skill_path", "grill_skill_path"),
+    ("integration", "skill_path"),
     [
-        (
-            "claude",
-            Path(".claude/skills/sssf"),
-            Path(".claude/skills/sssf-grill-me"),
-        ),
-        (
-            "codex",
-            Path(".agents/skills/sssf"),
-            Path(".agents/skills/sssf-grill-me"),
-        ),
-        (
-            "kiro",
-            Path(".kiro/skills/sssf"),
-            Path(".kiro/skills/sssf-grill-me"),
-        ),
+        ("claude", Path(".claude/skills/sssf")),
+        ("codex", Path(".agents/skills/sssf")),
+        ("kiro", Path(".kiro/skills/sssf")),
     ],
 )
-def test_installs_selected_integration(
-    tmp_path, integration, skill_path, grill_skill_path
-):
+def test_installs_selected_integration(tmp_path, integration, skill_path):
     result = subprocess.run(
         [sys.executable, str(INSTALLER), "--integration", integration],
         cwd=tmp_path,
@@ -53,8 +38,12 @@ def test_installs_selected_integration(
 
     assert f"integration: {integration}" in result.stdout
     assert (tmp_path / skill_path / "SKILL.md").is_file()
-    installed_grill_skill = tmp_path / grill_skill_path / "SKILL.md"
-    assert installed_grill_skill.read_text() == GRILL_SKILL.read_text()
+    # Driven off the installer's own tuple: a companion skill that is added
+    # there but not stamped beside the factory would otherwise ship invisible.
+    for companion in load_installer().COMPANION_SKILLS:
+        source = REPO_ROOT / ".claude/skills" / companion / "SKILL.md"
+        installed = tmp_path / skill_path.parent / companion / "SKILL.md"
+        assert installed.read_text() == source.read_text(), companion
     assert not (tmp_path / skill_path / "apps/visualizer/node_modules").exists()
     assert not (tmp_path / skill_path / "apps/visualizer/dist").exists()
     assert (tmp_path / "adws/adw_modules/harnesses.py").is_file()
@@ -62,6 +51,20 @@ def test_installs_selected_integration(
     installed_justfile = (tmp_path / "justfile").read_text()
     assert "sssf *ARGS:" in installed_justfile
     assert "simple-sdlc *ARGS:" not in installed_justfile
+
+
+def test_every_companion_skill_on_disk_is_registered_for_install():
+    """The installer stamps `sssf` plus a fixed tuple, so a companion skill
+    added to the source tree and not to that tuple exists in the repo and ships
+    to nobody. Driving the install assertions off COMPANION_SKILLS cannot catch
+    that direction — this compares the tuple against what is actually there."""
+    installer = load_installer()
+    on_disk = {
+        path.parent.name
+        for path in (REPO_ROOT / ".claude/skills").glob("*/SKILL.md")
+        if path.parent.name != "sssf"
+    }
+    assert on_disk == set(installer.COMPANION_SKILLS)
 
 
 def test_none_installs_factory_without_host_integration(tmp_path):

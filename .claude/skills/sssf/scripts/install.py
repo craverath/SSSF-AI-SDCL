@@ -30,7 +30,7 @@ INTEGRATION_PATHS = {
     "kiro": Path(".kiro/skills/sssf"),
 }
 
-COMPANION_SKILLS = ("sssf-grill-me",)
+COMPANION_SKILLS = ("sssf-grill-me", "sssf-pick-models")
 
 IGNORED_SOURCE_NAMES = {
     "__pycache__",
