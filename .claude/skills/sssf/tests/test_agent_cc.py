@@ -129,11 +129,12 @@ def test_tools_are_translated_and_sent_as_one_comma_joined_argument(tmp_path, fa
     assert argv[argv.index("--tools") + 1] == "Read,Bash,Edit"
 
 
-def test_prompt_is_not_swallowed_by_tools(tmp_path, fake_cli_env):
+def test_prompt_is_sent_through_stdin_so_tools_cannot_swallow_it(tmp_path, fake_cli_env):
     fake_cli_env.set_lines(STREAM_LINES)
     agent_cc.ClaudeCodeAdapter().run(_request(tmp_path, tools=["read", "bash"]))
     argv = fake_cli_env.argv()
-    assert argv[-1] == "do the thing"   # the prompt, still its own final argument
+    assert "do the thing" not in argv
+    assert fake_cli_env.stdin() == "do the thing"
 
 
 def test_validate_rejects_a_pi_tool_with_no_claude_code_mapping():

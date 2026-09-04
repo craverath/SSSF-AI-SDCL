@@ -6,6 +6,7 @@ any of the three real CLIs without per-test script generation:
 
   FAKE_CLI_ARGV_FILE        if set, argv[1:] is dumped there as JSON (for
                              asserting on the exact command an adapter built).
+  FAKE_CLI_STDIN_FILE       if set, stdin is dumped there as text.
   FAKE_CLI_LINES_FILE       if set, each line is printed to stdout, flushed
                              one at a time (simulates a streaming JSONL CLI).
   FAKE_CLI_EXIT_CODE        process exit code (default 0).
@@ -32,6 +33,11 @@ def main() -> None:
     if argv_file:
         with open(argv_file, "w") as f:
             json.dump(sys.argv[1:], f)
+
+    stdin_file = os.environ.get("FAKE_CLI_STDIN_FILE")
+    if stdin_file:
+        with open(stdin_file, "w") as f:
+            f.write(sys.stdin.read())
 
     if len(sys.argv) > 1 and sys.argv[1] == "--list-models":
         print("PROVIDER  MODEL  CONTEXT")

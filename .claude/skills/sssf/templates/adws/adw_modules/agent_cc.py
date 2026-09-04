@@ -16,10 +16,9 @@ Tools: Pi's tool vocabulary (read, bash, edit, write, grep, find) is not
 Claude Code's (Read, Bash, Edit, Write, Grep, Glob) — TOOL_MAP is the small,
 direct translation, and `validate()` rejects any `agent.tools` entry that
 isn't in it (Pi's `ls` has no Claude Code equivalent, so it fails loudly
-rather than being dropped or passed through untranslated). `--tools` is
-documented as taking ONE comma-separated string ("Bash,Edit,Read"); passing
-it as separate argv tokens instead is a real bug — the flag is variadic and
-will happily swallow the trailing positional PROMPT as one more "tool name".
+rather than being dropped or passed through untranslated). The prompt is sent
+through stdin because Claude's variadic `--tools` option can consume a trailing
+positional prompt.
 
 Effort: Claude Code's `--effort` only accepts low/medium/high/xhigh/max —
 Pi's off/minimal have no equivalent, so `validate()` rejects them too.
@@ -116,25 +115,25 @@ def run(request: HarnessRequest, on_event: Optional[Callable[[dict], None]] = No
         cmd += ["--resume", resumable]
     if request.tools:
         # ONE comma-joined token, per --tools' own documented form ("Bash,Edit,Read").
-        # Passed as separate argv tokens instead, the flag is variadic enough to
-        # swallow the prompt appended right after it as one more "tool name".
+        # The flag is variadic, so the prompt is supplied through stdin below.
         cmd += ["--tools", ",".join(_map_tools(request.tools))]
-    cmd.append(request.prompt)
-
     raw_path = Path(request.raw_output_path)
     raw_path.parent.mkdir(parents=True, exist_ok=True)
 
     result = HarnessResult(session_id=resumable or "")
     pending: dict[str, dict] = {}   # tool_use id -> {tool, args}, until its tool_result arrives
 
-    # stdin DEVNULL for the same reason as pi: the prompt travels in argv, and
-    # an inherited stdin leaves the child waiting on input that never comes.
-    process = subprocess.Popen(cmd, stdin=subprocess.DEVNULL,
+    # Claude documents stdin as a prompt source for --print. This also keeps the
+    # variadic --tools option from consuming a trailing positional prompt.
+    process = subprocess.Popen(cmd, stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                text=True, bufsize=1, cwd=request.cwd,
                                env=operator_env())
     if on_spawn:
         on_spawn(process.pid)
+    assert process.stdin is not None
+    process.stdin.write(request.prompt)
+    process.stdin.close()
     # Drained on a background thread from the moment the child exists: an
     # unread stderr pipe fills and blocks the child's write, which stalls
     # stdout too and looks exactly like a hang (see utils.drain_stderr).

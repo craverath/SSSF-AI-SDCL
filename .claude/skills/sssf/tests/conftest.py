@@ -37,8 +37,10 @@ def fake_cli_env(tmp_path, monkeypatch):
     """Wire FAKE_CLI_* env vars to files under tmp_path and return a small
     controller: set_lines(jsonl_lines), set_exit(code), argv() -> list[str]."""
     argv_file = tmp_path / "argv.json"
+    stdin_file = tmp_path / "stdin.txt"
     lines_file = tmp_path / "lines.jsonl"
     monkeypatch.setenv("FAKE_CLI_ARGV_FILE", str(argv_file))
+    monkeypatch.setenv("FAKE_CLI_STDIN_FILE", str(stdin_file))
     monkeypatch.setenv("FAKE_CLI_LINES_FILE", str(lines_file))
     monkeypatch.setenv("FAKE_CLI_EXIT_CODE", "0")
 
@@ -60,6 +62,9 @@ def fake_cli_env(tmp_path, monkeypatch):
 
         def argv(self) -> list[str]:
             return json.loads(argv_file.read_text())
+
+        def stdin(self) -> str:
+            return stdin_file.read_text()
 
     return Controller()
 
