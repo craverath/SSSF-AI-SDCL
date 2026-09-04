@@ -75,10 +75,11 @@ uv run adws/adw_prompt.py "reply with a one-line summary of this repo" --agent s
 
 `--integration codex` installs the repo-local skills at `.agents/skills/`, where Codex exposes them as `$sssf` and `$sssf-grill-me`. `--integration claude` installs them at `.claude/skills/`, where Claude Code exposes them as `/sssf` and `/sssf-grill-me`. `none` installs only the factory.
 
-Use `sssf-grill-me` when the initial request still needs product decisions. It inspects the relevant code, interviews the developer, and writes an approved `specs/YYYY-MM-DD-<slug>.md` without changing the application. Its instructions use only capabilities shared by coding harnesses, so the output contract is the same with Claude Code or Codex. That file is accepted directly by the full workflow:
+Use `sssf-grill-me` when the initial request still needs product decisions. It inspects the relevant code, interviews the developer, and writes an approved `specs/YYYY-MM-DD-<slug>.md` without changing the application. Its instructions use only capabilities shared by coding harnesses, so the output contract is the same with Claude Code or Codex. The full workflow accepts either an inline prompt or a specification path:
 
 ```bash
-just simple-sdlc specs/YYYY-MM-DD-<slug>.md
+just sssf "add a /health endpoint"
+just sssf specs/YYYY-MM-DD-<slug>.md
 ```
 
 Re-running `install.py` is safe. It preserves existing files, applies only narrowly defined migrations for obsolete generated paths, and reports what it skipped. `--force` refreshes stamped code and the selected integration, but it overwrites **all** stamped files including your `sssf.config.yaml` and your prompts, so commit first.

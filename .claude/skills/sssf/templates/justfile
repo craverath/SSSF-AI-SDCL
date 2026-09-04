@@ -56,8 +56,8 @@ plan-build *ARGS:
 sdlc *ARGS:
     uv run adws/adw_plan_build_test.py --config {{config}} "$@"
 
-# the full chain, plus review and docs: just simple-sdlc "add a /health endpoint"
-simple-sdlc *ARGS:
+# the full chain, plus review and docs: just sssf "<prompt or path/to/spec.md>"
+sssf *ARGS:
     uv run adws/adw_simple_sdlc.py --config {{config}} "$@"
 
 # ── watch it ────────────────────────────────────────────────────────────────

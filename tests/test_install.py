@@ -43,6 +43,9 @@ def test_installs_selected_integration(
     assert not (tmp_path / skill_path / "apps/visualizer/dist").exists()
     assert (tmp_path / "adws/adw_modules/harnesses.py").is_file()
     assert (tmp_path / "adws/adw_sssf_config/sssf.config.yaml").is_file()
+    installed_justfile = (tmp_path / "justfile").read_text()
+    assert "sssf *ARGS:" in installed_justfile
+    assert "simple-sdlc *ARGS:" not in installed_justfile
 
 
 def test_none_installs_factory_without_host_integration(tmp_path):
@@ -81,3 +84,29 @@ def test_migrates_legacy_visualizer_path_without_replacing_justfile(tmp_path):
     assert "echo keep-me" in installed
     assert 'skill_dir=".agents/skills/sssf"' in installed
     assert "cd .claude/skills/sssf/apps/visualizer" not in installed
+
+
+def test_migrates_legacy_sssf_recipe_without_replacing_justfile(tmp_path):
+    justfile = tmp_path / "justfile"
+    justfile.write_text(
+        "custom-recipe:\n"
+        "    echo keep-me\n"
+        "# the full chain, plus review and docs: "
+        'just simple-sdlc "add a /health endpoint"\n'
+        "simple-sdlc *ARGS:\n"
+        '    uv run adws/adw_simple_sdlc.py --config {{config}} "$@"\n'
+    )
+
+    subprocess.run(
+        [sys.executable, str(INSTALLER), "--integration", "none"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    installed = justfile.read_text()
+    assert "echo keep-me" in installed
+    assert 'just sssf "<prompt or path/to/spec.md>"' in installed
+    assert "sssf *ARGS:" in installed
+    assert "simple-sdlc" not in installed

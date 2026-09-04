@@ -43,6 +43,16 @@ PORTABLE_VISUALIZER_COMMAND = (
     '[ -d "$skill_dir" ] || { echo "SSSF integration not installed" >&2; exit 1; }; '
     'cd "$skill_dir/apps/visualizer"'
 )
+LEGACY_SSSF_RECIPE = (
+    'simple-sdlc *ARGS:\n    uv run adws/adw_simple_sdlc.py --config {{config}} "$@"'
+)
+SSSF_RECIPE = 'sssf *ARGS:\n    uv run adws/adw_simple_sdlc.py --config {{config}} "$@"'
+LEGACY_SSSF_EXAMPLE = (
+    '# the full chain, plus review and docs: just simple-sdlc "add a /health endpoint"'
+)
+SSSF_EXAMPLE = (
+    '# the full chain, plus review and docs: just sssf "<prompt or path/to/spec.md>"'
+)
 
 GITIGNORE_ENTRIES = [
     "adws/adw_data/sessions/",
@@ -89,19 +99,23 @@ def ensure_gitignore(root: Path, stamped: list[str]) -> None:
 
 
 def migrate_legacy_justfile(root: Path, stamped: list[str]) -> None:
-    """Replace only the original Claude-specific visualizer command."""
+    """Apply narrowly scoped migrations to original generated recipes."""
     justfile = root / "justfile"
     if not justfile.exists():
         return
 
     current = justfile.read_text()
-    if LEGACY_VISUALIZER_COMMAND not in current:
+    updated = current.replace(
+        LEGACY_VISUALIZER_COMMAND,
+        PORTABLE_VISUALIZER_COMMAND,
+    )
+    updated = updated.replace(LEGACY_SSSF_RECIPE, SSSF_RECIPE)
+    updated = updated.replace(LEGACY_SSSF_EXAMPLE, SSSF_EXAMPLE)
+    if updated == current:
         return
 
-    justfile.write_text(
-        current.replace(LEGACY_VISUALIZER_COMMAND, PORTABLE_VISUALIZER_COMMAND)
-    )
-    stamped.append(f"{justfile} (updated integration path)")
+    justfile.write_text(updated)
+    stamped.append(f"{justfile} (updated generated recipes)")
 
 
 def default_integration(root: Path) -> str:

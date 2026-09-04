@@ -114,7 +114,7 @@ ready, or identify the owner and why each item does not block implementation.
 Finish by reporting the saved path and the handoff command:
 
 ```bash
-just simple-sdlc specs/<actual-file-name>.md
+just sssf specs/<actual-file-name>.md
 ```
 
 If that recipe is unavailable, provide the repository's equivalent SSSF command.
