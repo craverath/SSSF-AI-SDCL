@@ -31,7 +31,7 @@ The two `*_engineering` dirs mirror the two config keys of the same name: `promp
 
 ## Idempotency
 
-Re-running is safe. `install.py` skips **every** file that already exists — your config, your prompts, and previously stamped code alike — and reports what it skipped, so a second run doubles as a drift check. To refresh stamped code (`adw_modules/`, the starter `adw_*.py`) to the skill's current version, run with `--force` — but know that `--force` overwrites ALL existing stamped files, including `sssf.config.yaml` and `prompt_engineering/`, so commit or back up user-owned edits first.
+Re-running is safe. `install.py` preserves existing files — your config, prompts, and previously stamped code alike — while applying narrowly defined migrations for obsolete generated paths. It reports what it skipped, so a second run doubles as a drift check. To refresh stamped code (`adw_modules/`, the starter `adw_*.py`) to the skill's current version, run with `--force` — but know that `--force` overwrites ALL existing stamped files, including `sssf.config.yaml` and `prompt_engineering/`, so commit or back up user-owned edits first.
 
 ## Post-install checklist
 

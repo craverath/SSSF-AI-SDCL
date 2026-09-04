@@ -75,7 +75,7 @@ uv run adws/adw_prompt.py "reply with a one-line summary of this repo" --agent s
 
 `--integration codex` installs the repo-local skill at `.agents/skills/sssf`, where Codex exposes it as `$sssf`. `--integration claude` installs it at `.claude/skills/sssf`, where Claude Code exposes it as `/sssf`. `none` installs only the factory.
 
-Re-running `install.py` is safe. It skips every file that already exists and reports what it skipped, so a second run doubles as a drift check. `--force` refreshes stamped code and the selected integration, but it overwrites **all** stamped files including your `sssf.config.yaml` and your prompts, so commit first.
+Re-running `install.py` is safe. It preserves existing files, applies only narrowly defined migrations for obsolete generated paths, and reports what it skipped. `--force` refreshes stamped code and the selected integration, but it overwrites **all** stamped files including your `sssf.config.yaml` and your prompts, so commit first.
 
 Green on the smoke test means the whole path works: config validated, session minted, Pi ran, envelope parsed, events landed in `adws/adw_data/sssf.db`. Fix it there before composing anything larger, because every multi-agent chain rides this exact path.
 

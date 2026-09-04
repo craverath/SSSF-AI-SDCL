@@ -10,7 +10,7 @@ Usage:
 Stamps: adws/ (modules + starter ADWs), adws/adw_data/prompt_engineering/
 (starter agents), adws/adw_sssf_config/sssf.config.yaml, .env.sample,
 .gitignore entries, and the selected host skill.
-Existing files are skipped unless --force.
+Existing files are skipped unless --force; known safe path migrations are applied.
 """
 
 import argparse
@@ -33,6 +33,14 @@ IGNORED_SOURCE_NAMES = {
     ".ruff_cache",
     ".DS_Store",
 }
+
+LEGACY_VISUALIZER_COMMAND = "cd .claude/skills/sssf/apps/visualizer"
+PORTABLE_VISUALIZER_COMMAND = (
+    'skill_dir=".agents/skills/sssf"; '
+    '[ -d "$skill_dir" ] || skill_dir=".claude/skills/sssf"; '
+    '[ -d "$skill_dir" ] || { echo "SSSF integration not installed" >&2; exit 1; }; '
+    'cd "$skill_dir/apps/visualizer"'
+)
 
 GITIGNORE_ENTRIES = [
     "adws/adw_data/sessions/",
@@ -76,6 +84,22 @@ def ensure_gitignore(root: Path, stamped: list[str]) -> None:
         with gitignore.open("a") as f:
             f.write("\n# sssf runtime\n" + "\n".join(missing) + "\n")
         stamped.append(f"{gitignore} (+{len(missing)} entries)")
+
+
+def migrate_legacy_justfile(root: Path, stamped: list[str]) -> None:
+    """Replace only the original Claude-specific visualizer command."""
+    justfile = root / "justfile"
+    if not justfile.exists():
+        return
+
+    current = justfile.read_text()
+    if LEGACY_VISUALIZER_COMMAND not in current:
+        return
+
+    justfile.write_text(
+        current.replace(LEGACY_VISUALIZER_COMMAND, PORTABLE_VISUALIZER_COMMAND)
+    )
+    stamped.append(f"{justfile} (updated integration path)")
 
 
 def default_integration(root: Path) -> str:
@@ -147,6 +171,7 @@ def main() -> int:
     # plus the run banner tell you to use them, so a stamped repo has to have
     # them. Skipped like any other file if the repo already has a justfile.
     stamp(TEMPLATES / "justfile", root / "justfile", args.force, stamped, skipped)
+    migrate_legacy_justfile(root, stamped)
     ensure_gitignore(root, stamped)
     install_integration(root, integration, args.force, stamped, skipped)
 

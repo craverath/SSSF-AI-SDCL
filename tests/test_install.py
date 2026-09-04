@@ -45,3 +45,26 @@ def test_none_installs_factory_without_host_integration(tmp_path):
     assert (tmp_path / "adws/adw_modules/harnesses.py").is_file()
     assert not (tmp_path / ".claude").exists()
     assert not (tmp_path / ".agents").exists()
+
+
+def test_migrates_legacy_visualizer_path_without_replacing_justfile(tmp_path):
+    justfile = tmp_path / "justfile"
+    justfile.write_text(
+        "custom-recipe:\n"
+        "    echo keep-me\n"
+        "obs:\n"
+        "    cd .claude/skills/sssf/apps/visualizer && bun install\n"
+    )
+
+    subprocess.run(
+        [sys.executable, str(INSTALLER), "--integration", "codex"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    installed = justfile.read_text()
+    assert "echo keep-me" in installed
+    assert 'skill_dir=".agents/skills/sssf"' in installed
+    assert "cd .claude/skills/sssf/apps/visualizer" not in installed
