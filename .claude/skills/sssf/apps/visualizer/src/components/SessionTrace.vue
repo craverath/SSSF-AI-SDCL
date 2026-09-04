@@ -99,8 +99,8 @@ watchEffect(() => {
 
 // ── Lanes ────────────────────────────────────────────────────────────────────
 
-const ENGINEER_COLOR = '#e8b64a'
-const CODE_COLOR = '#5ad2dd'
+const ENGINEER_COLOR = '#b8860b'
+const CODE_COLOR = '#2f8f97'
 
 const KIND_ICONS = { engineer: UserRound, code: SquareTerminal, agent: Bot }
 
@@ -354,7 +354,7 @@ function blockStyle(p: Phase, lane: Lane): Record<string, string> | undefined {
     left: geom.left,
     width: geom.width,
     background: `linear-gradient(180deg, ${hexAlpha(lane.color, 0.2)}, ${hexAlpha(lane.color, 0.05)})`,
-    borderColor: p.status === 'fail' ? 'rgba(255, 111, 103, 0.8)' : hexAlpha(lane.color, 0.55),
+    borderColor: p.status === 'fail' ? 'rgba(193, 74, 66, 0.8)' : hexAlpha(lane.color, 0.55),
     '--lane-glow': hexAlpha(lane.color, 0.28),
   }
 }
@@ -711,7 +711,7 @@ function selectPhase(p: Phase) {
 .ctx-bar {
   height: 6px;
   border-radius: 999px;
-  background: rgba(6, 8, 15, 0.75);
+  background: var(--panel-3);
   border: 1px solid var(--border-soft);
   overflow: hidden;
 }
@@ -748,7 +748,7 @@ function selectPhase(p: Phase) {
   position: absolute;
   top: 0;
   bottom: 0;
-  border-left: 1px dashed rgba(174, 191, 212, 0.14);
+  border-left: 1px dashed var(--border-soft);
 }
 
 .block {
@@ -772,7 +772,7 @@ function selectPhase(p: Phase) {
 }
 
 .block:hover {
-  box-shadow: 0 0 18px var(--lane-glow, rgba(108, 182, 255, 0.2));
+  box-shadow: 0 0 18px var(--lane-glow, rgba(52, 84, 209, 0.2));
 }
 
 .b-top {
@@ -838,7 +838,7 @@ function selectPhase(p: Phase) {
 .block.selected {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
-  box-shadow: 0 0 22px var(--lane-glow, rgba(108, 182, 255, 0.25));
+  box-shadow: 0 0 22px var(--lane-glow, rgba(52, 84, 209, 0.25));
 }
 
 .tool-tick {
