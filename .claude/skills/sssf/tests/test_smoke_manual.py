@@ -5,7 +5,7 @@ read-only prompt and cost real tokens, so they are skipped unless explicitly
 requested:
 
     SSSF_SMOKE=1 uv run --with pydantic --with pyyaml --with python-dotenv \\
-        --with pytest pytest .claude/skills/sssf/tests/test_smoke_manual.py -s
+        --with pytest pytest <skill-dir>/tests/test_smoke_manual.py -s
 """
 
 from __future__ import annotations

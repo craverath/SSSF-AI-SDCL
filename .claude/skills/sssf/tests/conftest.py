@@ -2,7 +2,7 @@
 
 Run with:
     uv run --with pydantic --with pyyaml --with python-dotenv --with pytest \\
-        pytest .claude/skills/sssf/tests
+        pytest <skill-dir>/tests
 
 No test here calls a real model. Every adapter is exercised against
 fake_cli.py, a stand-in CLI driven by env vars (see fixtures/fake_cli.py).

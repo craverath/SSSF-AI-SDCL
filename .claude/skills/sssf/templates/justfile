@@ -86,4 +86,4 @@ procs ADW_ID:
 
 # boot the trace UI, http://localhost:4601 (api on :4600)
 obs:
-    cd .claude/skills/sssf/apps/visualizer && bun install && (SSSF_DB={{justfile_directory()}}/{{db}} bun run server/index.ts &) && bunx vite
+    skill_dir=".agents/skills/sssf"; [ -d "$skill_dir" ] || skill_dir=".claude/skills/sssf"; [ -d "$skill_dir" ] || { echo "SSSF integration not installed" >&2; exit 1; }; cd "$skill_dir/apps/visualizer" && bun install && (SSSF_DB={{justfile_directory()}}/{{db}} bun run server/index.ts &) && bunx vite

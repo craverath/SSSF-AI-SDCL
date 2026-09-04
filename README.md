@@ -50,28 +50,21 @@ The bill for skipping this is not only tokens. It is cost, speed, and consistenc
 
 ## Install
 
-Two steps: get the skill into your repo, then stamp the factory.
+Run the repository installer from the **target repo root** and select the host that should operate SSSF. This integration choice does not change the `coding_agent` configured for any workflow agent.
 
-### Agentic Install
-
-Copy `.claude/skills/sssf/` into the target repo and type `/sssf install` inside Claude Code. The skill is named `sssf`, so that is the skill name followed by the `install` argument. There is no bare `/install` command. The agent reads the skill's own `cookbooks/install.md` and does the rest.
-
-### Manual Install
-
-**Prereqs:** [`uv`](https://docs.astral.sh/uv/), [`pi`](https://github.com/mariozechner/pi-coding-agent), `sqlite3`, and an API key for whichever providers your roster names (see below). [`bun`](https://bun.sh) only if you want the visualizer.
+**Prereqs:** [`uv`](https://docs.astral.sh/uv/), `sqlite3`, and the CLI used by each agent in your roster (`pi`, `claude`, or `codex`), already authenticated. [`bun`](https://bun.sh) is only needed for the visualizer.
 
 ```bash
-# 1. get the skill into the target repo
-mkdir -p .claude/skills
-cp -r /path/to/super-simple-software-factory/.claude/skills/sssf .claude/skills/
+# from the target repo root
+uv run /path/to/super-simple-software-factory/install.py --integration codex
+# or: --integration claude
+# or: --integration none
 
-# 2. stamp the factory (run from the target repo ROOT, the cwd is where everything lands)
-uv run .claude/skills/sssf/scripts/install.py
 cp .env.sample .env                              # then set OPENROUTER_API_KEY
 pi --version                                     # confirm pi is on PATH, or set PI_PATH in .env
 git init && git commit --allow-empty -m init     # chains that end in a commit phase need a repo
 
-# 3. smoke test: two cheap read-only runs, end to end
+# smoke test: two cheap read-only runs, end to end
 just demo
 just sessions              # what just happened
 just obs                   # the trace UI, needs bun
@@ -80,7 +73,9 @@ just obs                   # the trace UI, needs bun
 uv run adws/adw_prompt.py "reply with a one-line summary of this repo" --agent scout
 ```
 
-Re-running `install.py` is safe. It skips every file that already exists and reports what it skipped, so a second run doubles as a drift check. `--force` refreshes stamped code to the skill's current version, but it overwrites **all** stamped files including your `sssf.config.yaml` and your prompts, so commit first.
+`--integration codex` installs the repo-local skill at `.agents/skills/sssf`, where Codex exposes it as `$sssf`. `--integration claude` installs it at `.claude/skills/sssf`, where Claude Code exposes it as `/sssf`. `none` installs only the factory.
+
+Re-running `install.py` is safe. It skips every file that already exists and reports what it skipped, so a second run doubles as a drift check. `--force` refreshes stamped code and the selected integration, but it overwrites **all** stamped files including your `sssf.config.yaml` and your prompts, so commit first.
 
 Green on the smoke test means the whole path works: config validated, session minted, Pi ran, envelope parsed, events landed in `adws/adw_data/sssf.db`. Fix it there before composing anything larger, because every multi-agent chain rides this exact path.
 
@@ -123,7 +118,7 @@ There are three actors here, and the design keeps them separate on purpose: **th
   <img src="images/03_skill_stamp.svg" alt="The sssf skill directory on the left stamping config, adws, and prompt_engineering into three different target repos" width="780">
 </p>
 
-Everything lives in `.claude/skills/sssf/`. `SKILL.md` carries the hard rules and routes each request to one of nine cookbooks. `references/` holds the deep specs, `scripts/` holds the generators, `templates/` holds exactly what gets stamped.
+The same skill content is installed at `.claude/skills/sssf/` for Claude Code or `.agents/skills/sssf/` for Codex. `SKILL.md` carries the hard rules and routes each request to one of nine cookbooks. `references/` holds the deep specs, `scripts/` holds the generators, and `templates/` holds exactly what gets stamped.
 
 | What lands in your repo | Where it comes from | Tracked |
 |---|---|---|
@@ -268,10 +263,11 @@ That one cursor query is the entire transport. Live view and full history are th
 
 Files stay the raw record (`raw_output.jsonl`, `envelope.json`, `agent_map.json`). The db is the queryable mirror. Losing it loses nothing you cannot rebuild.
 
-The skill ships a read-only UI for this db at `.claude/skills/sssf/apps/visualizer/`: Vue and Vite served by Bun on port 4600, with sessions, a trace waterfall, and per-phase tool-call detail.
+The skill ships a read-only UI for this db under the selected integration directory: Vue and Vite served by Bun on port 4600, with sessions, a trace waterfall, and per-phase tool-call detail.
 
 ```bash
-cd .claude/skills/sssf/apps/visualizer && bun install
+cd .agents/skills/sssf/apps/visualizer && bun install   # Codex integration
+# Claude Code: .claude/skills/sssf/apps/visualizer
 SSSF_DB=/abs/path/to/your-repo/adws/adw_data/sssf.db bun run server/index.ts &
 bunx vite
 ```
@@ -284,7 +280,8 @@ It resolves its target through `--db`, then `SSSF_DB`, then `<cwd>/adws/adw_data
 
 ```
 super-simple-software-factory/          # the deployable factory, and nothing else
-└── .claude/skills/sssf/
+├── install.py                          # host-neutral installer entry point
+└── .claude/skills/sssf/                # canonical skill source
     ├── SKILL.md                        # hard rules + request routing table
     ├── cookbooks/                      # 9 orchestrator playbooks, loaded lazily
     ├── references/                     # config / handoff / observability specs

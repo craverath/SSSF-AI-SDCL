@@ -1,14 +1,14 @@
 # Install
 
-`/sssf install` — stamp the entire factory out of the skill and into the current working directory.
+`sssf install` — stamp the entire factory out of the skill and into the current working directory. Invoke it as `/sssf install` in Claude Code or `$sssf install` in Codex.
 
 ## Run it
 
 ```bash
-uv run .claude/skills/sssf/scripts/install.py
+uv run <skill-dir>/scripts/install.py
 ```
 
-Run from the **target repo root** — the cwd is where everything lands. If the skill lives in your user scope, the path is `~/.claude/skills/sssf/scripts/install.py`.
+Run from the **target repo root** — the cwd is where everything lands. The repository-local skill directory is `.claude/skills/sssf` for Claude Code and `.agents/skills/sssf` for Codex. The installer preserves the integration from which it is invoked.
 
 ## What gets stamped
 
