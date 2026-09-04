@@ -8,11 +8,11 @@ It lives at **`adws/adw_sssf_config/sssf.config.yaml`** — the default path eve
 
 ```yaml
 defaults:
-  coding_agent: pi
-  model: google/gemini-3.6-flash        # ALWAYS provider/model-id
+  coding_agent: claude_code
+  model: sonnet
   thinking: medium
   harness_engineering: []
-  tools: [read, bash, edit, write, grep, find, ls]
+  tools: [read, bash, edit, write, grep, find]
   data_dir: adws/adw_data
 
 observability:
@@ -21,19 +21,22 @@ observability:
 
 agents:
   - name: planner
-    coding_agent: pi
-    model: google/gemini-3.6-flash        # ALWAYS provider/model-id
     thinking: high
     color: "#a78bfa"
     purpose: Turn a request into a plan the builder can implement without asking questions.
     prompt_engineering:
       system: adws/adw_data/prompt_engineering/planner/system.md
       user: adws/adw_data/prompt_engineering/planner/user.md
-    harness_engineering:
-      - json-enforcer
     tools:
       - read
       - bash
+
+  - name: reviewer
+    coding_agent: codex
+    model: gpt-5.6-terra
+    thinking: high
+    tools: null
+    writes: []
 ```
 
 ## Fields
@@ -43,7 +46,7 @@ agents:
 | Field | Type | Meaning |
 |---|---|---|
 | `coding_agent` | `pi` \| `claude_code` \| `codex` | Which interface runs the agent, resolved through `adw_modules/harnesses.py`. All three are implemented; see [Harnesses](#harnesses) below. |
-| `model` | string | Model id. For Pi, any id registered in `~/.pi/agent/models.json`. Default `gemini-3.6-flash`. |
+| `model` | string | Harness-specific model id. Default `sonnet` for the default Claude Code harness. Pi uses ids registered in `~/.pi/agent/models.json`. |
 | `thinking` | enum | Reasoning effort — see below. Default `medium`. |
 | `color` | hex string | Lane color for every agent that does not set its own. Default empty — the visualizer falls back to its own palette. |
 | `harness_engineering` | list[string] | Coding-agent extensions. Pi: extension names. Claude Code: reserved (MCP, hooks). |
@@ -107,61 +110,50 @@ All three run through the exact same `agents.py` code path: one `HarnessRequest`
 
 **Credentials are never read or stored by SSSF.** Every adapter shells out to the CLI already logged in on the machine (`pi`, `claude`, `codex`) and relies entirely on that CLI's own auth state.
 
-A mixed roster — planner on Claude Code, builder and reviewer on Codex, everything else on Pi. The starter roster sets `defaults.tools` to Pi's seven tool names (see [Tools](#tools)); a `codex` agent that does not override `tools` would silently inherit that Pi-specific list, which `CodexAdapter.validate()` now rejects — `tools: null` is how a codex agent opts out and passes validation:
+A mixed roster is the default: Claude Code Sonnet handles planner, builder, scout, and documenter; Codex GPT-5.6 Terra handles review. Because Codex has no tool-allowlist flag, its agent must set `tools: null` instead of inheriting the Claude Code list:
 
 ```yaml
 agents:
   - name: planner
-    coding_agent: claude_code
-    model: opus
-    thinking: xhigh
+    thinking: high
     prompt_engineering:
       system: adws/adw_data/prompt_engineering/planner/system.md
       user: adws/adw_data/prompt_engineering/planner/user.md
 
-  - name: builder
-    coding_agent: codex
-    model: gpt-5.6-sol
-    thinking: high
-    tools: null                    # Codex has no allowlist flag — opt out of defaults.tools explicitly
-    prompt_engineering:
-      system: adws/adw_data/prompt_engineering/builder/system.md
-      user: adws/adw_data/prompt_engineering/builder/user.md
-
   - name: reviewer
     coding_agent: codex
-    model: gpt-5.6-sol
+    model: gpt-5.6-terra
     thinking: high
-    tools: null                    # same as builder — Codex agents always opt out
+    tools: null
     writes: []
     prompt_engineering:
       system: adws/adw_data/prompt_engineering/reviewer/system.md
       user: adws/adw_data/prompt_engineering/reviewer/user.md
 ```
 
-The starter roster this skill installs stays on `coding_agent: pi` throughout — switch an agent to `claude_code` or `codex` once that CLI is installed and logged in.
+Both CLIs must be installed and logged in before running the starter roster. SSSF reads no credentials for either.
 
 ## Model resolution
 
-**Always write `model` as `provider/model-id`.** `agents.py` hands the string to the Pi interface, which resolves it against pi's merged catalog — `~/.pi/agent/models.json` plus pi's built-in providers. The same model is usually carried by more than one provider (`gemini-3.6-flash` lives under `google` *and* under `openrouter` as `google/gemini-3.6-flash`), and a bare id that matches several **raises at resolution**:
+Model syntax belongs to the selected harness. Claude Code accepts aliases such as `sonnet`; Codex accepts its own model ids such as `gpt-5.6-terra`. For Pi, always write `provider/model-id`: Pi resolves it against `~/.pi/agent/models.json` plus its built-in providers, and a bare id that matches several raises at resolution:
 
 ```
 agent 'scout': model pattern 'gemini-3.6-flash' is ambiguous:
   [('google', 'gemini-3.6-flash'), ('openrouter', 'google/gemini-3.6-flash'), ...]
 ```
 
-That is `agents.validate()` doing its job — it fails before anything spawns rather than silently billing the wrong provider — but it means every agent in the roster inheriting that default is grounded until the pattern is qualified. Qualifying is the whole fix: `google/gemini-3.6-flash`, `openai/gpt-5.6-terra`, `fireworks/accounts/fireworks/models/kimi-k3`. The leading segment is matched against the provider list first, so the rest of the string can contain slashes.
+That is `agents.validate()` doing its job — it fails before anything spawns rather than silently billing the wrong provider. Qualifying the Pi model is the whole fix: `google/gemini-3.6-flash`, `openai/gpt-5.6-terra`, or `fireworks/accounts/fireworks/models/kimi-k3`. The leading segment is matched against the provider list first, so the rest of the string can contain slashes.
 
 Other consequences worth knowing:
 
-- A model must be in the catalog before any agent can name it. An unknown id fails at resolution, before spawn. `pi --list-models` is the catalog the resolver actually reads.
+- A Pi model must be in its catalog before an agent can name it. An unknown id fails at resolution, before spawn. `pi --list-models` is the catalog the Pi adapter reads.
 - **Ambiguity can appear without you touching the config.** Registering a new provider that carries a model you already use turns a formerly-fine bare pattern ambiguous. If a roster stops validating and nobody edited it, that is why.
 - Provider credentials come from the environment, not the config — the key that matches the provider you named (`GEMINI_API_KEY` for `google/...`, `OPENROUTER_API_KEY` for `openrouter/...`).
 - The resolved model is recorded per session in `agent_map.json` and mirrored into the `agent_sessions` table. **Changing an agent's model invalidates its session**: a joined run starts that agent fresh instead of resuming a context window built by a different model.
 
 ## Tools
 
-`tools` maps to `pi --tools`. Pi's seven builtin tool names:
+For Pi, `tools` maps to `pi --tools`. Pi's seven builtin tool names are:
 
 | Tool | Purpose | Pi's own default |
 |---|---|---|
@@ -173,7 +165,7 @@ Other consequences worth knowing:
 | `find` | find files by glob | **off** |
 | `ls` | list directory contents | **off** |
 
-`grep`, `find`, and `ls` are off in bare Pi, so an agent that does not name them will shell out through `bash` to do the same work. The starter roster therefore sets `defaults.tools` to all seven and lets each agent narrow from there.
+`grep`, `find`, and `ls` are off in bare Pi, so an agent that does not name them will shell out through `bash` to do the same work. The starter roster instead targets Claude Code and sets `defaults.tools` to the six names its adapter maps directly.
 
 **Resolution order:** an agent's own `tools` list wins; an agent that omits the key inherits `defaults.tools`; if neither is set, `tools` stays `None` and all tools are usable. An empty list is not "all tools" — it is a tool-less agent, and it will stall.
 

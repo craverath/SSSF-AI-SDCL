@@ -38,7 +38,7 @@ adws/
     └── sssf.db                  gitignored SQLite trace db the visualizer polls
 ```
 
-**Default roster runs Pi.** `coding_agent: pi`, default model `gemini-3.6-flash`, thinking `medium`. `claude_code` and `codex` are implemented and selectable per agent — see `references/config.md#harnesses` for the mapping and a mixed-roster example.
+**Default roster is mixed.** Planner, builder, scout, and documenter run Claude Code Sonnet; reviewer runs Codex GPT-5.6 Terra. `pi`, `claude_code`, and `codex` remain selectable per agent — see `references/config.md#harnesses`.
 
 ## The phase model
 

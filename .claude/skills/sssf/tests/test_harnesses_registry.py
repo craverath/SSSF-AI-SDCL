@@ -29,6 +29,23 @@ def test_resolve_unknown_coding_agent_fails_objectively():
         harnesses.resolve("some_other_cli")
 
 
+def test_starter_roster_uses_claude_sonnet_and_codex_terra():
+    config_path = Path(__file__).resolve().parents[1] / "templates/sssf.config.yaml"
+    config = agents.load_config(str(config_path))
+
+    expected = {
+        "planner": ("claude_code", "sonnet"),
+        "builder": ("claude_code", "sonnet"),
+        "scout": ("claude_code", "sonnet"),
+        "reviewer": ("codex", "gpt-5.6-terra"),
+        "documenter": ("claude_code", "sonnet"),
+    }
+    for name, (coding_agent, model) in expected.items():
+        agent = agents.resolve(config, name)
+        assert (agent.coding_agent, agent.model) == (coding_agent, model)
+        assert harnesses.resolve(coding_agent).validate(agent) == []
+
+
 def test_agents_module_has_no_per_cli_conditional():
     """agents.py must select behavior only through harnesses.resolve(); a
     literal `coding_agent == "pi"` (or similar) creeping back in would silently

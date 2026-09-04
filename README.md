@@ -60,8 +60,8 @@ uv run /path/to/super-simple-software-factory/install.py --integration codex
 # or: --integration claude
 # or: --integration none
 
-cp .env.sample .env                              # then set OPENROUTER_API_KEY
-pi --version                                     # confirm pi is on PATH, or set PI_PATH in .env
+claude --version                                 # starter agents
+codex --version                                  # starter reviewer
 git init && git commit --allow-empty -m init     # chains that end in a commit phase need a repo
 
 # smoke test: two cheap read-only runs, end to end
@@ -77,23 +77,13 @@ uv run adws/adw_prompt.py "reply with a one-line summary of this repo" --agent s
 
 Re-running `install.py` is safe. It preserves existing files, applies only narrowly defined migrations for obsolete generated paths, and reports what it skipped. `--force` refreshes stamped code and the selected integration, but it overwrites **all** stamped files including your `sssf.config.yaml` and your prompts, so commit first.
 
-Green on the smoke test means the whole path works: config validated, session minted, Pi ran, envelope parsed, events landed in `adws/adw_data/sssf.db`. Fix it there before composing anything larger, because every multi-agent chain rides this exact path.
+Green on the smoke test means the whole path works: config validated, a harness ran, the envelope parsed, and events landed in `adws/adw_data/sssf.db`. Fix it there before composing anything larger, because every multi-agent chain rides this exact path.
 
-### Which API keys you actually need
+### Credentials
 
-That depends on your roster, not on this repo. Every `model:` in `sssf.config.yaml` is written `provider/model-id`, and the provider half decides the key. Which key pi reads for a given provider comes from `~/.pi/agent/models.json`.
+The starter roster uses Claude Code Sonnet for planner, builder, scout, and documenter, plus Codex GPT-5.6 Terra for review. Both CLIs must already be logged in; SSSF does not read their credentials.
 
-The starter roster deliberately mixes providers to show the point, so out of the box it wants three:
-
-| Model in the starter roster | Provider | Key |
-|---|---|---|
-| `google/gemini-3.6-flash` (default, builder, scout) | served via openrouter | `OPENROUTER_API_KEY` |
-| `fireworks/accounts/fireworks/models/kimi-k3` (planner) | fireworks | `FIREWORKS_API_KEY` |
-| `openai/gpt-5.6-terra`, `openai/gpt-5.6-luna` (reviewer, documenter) | openai | `OPENAI_API_KEY` |
-
-**Want one key instead of three?** Delete the per-agent `model:` lines and let every agent inherit `defaults.model`. The whole roster then runs on one provider. Cheapest way to get a first green run.
-
-One sharp edge worth knowing: `agents.validate()` checks that a model is *written* as `provider/id`, not that the provider is reachable or that its key is set. A missing key does not fail at startup. It fails when that agent runs, partway into a chain.
+API keys in `.env` are only needed when you configure a Pi agent backed by an API provider.
 
 
 ---
@@ -143,8 +133,8 @@ There is no DSL here. No framework to learn. It is Python, YAML, agents, and a s
 
 ```yaml
 defaults:
-  coding_agent: pi                 # pi | claude_code | codex — selectable per agent
-  model: google/gemini-3.6-flash   # provider/model-id, a bare id can match several providers
+  coding_agent: claude_code        # pi | claude_code | codex — selectable per agent
+  model: sonnet
   thinking: medium                 # off | minimal | low | medium | high | xhigh | max
   protected_files:                 # no agent may edit the machinery that grades it
     - adws/adw_modules/
@@ -154,17 +144,21 @@ defaults:
 
 agents:
   - name: planner
-    model: fireworks/accounts/fireworks/models/kimi-k3
     thinking: high                 # per-agent overrides win over defaults
     color: "#a78bfa"               # this agent's lane swatch in the trace
     purpose: Turn a request into a plan the builder can implement without asking questions.
     prompt_engineering:
       system: adws/adw_data/prompt_engineering/planner/system.md
       user: adws/adw_data/prompt_engineering/planner/user.md
-    harness_engineering:
-      - adws/adw_data/harness_engineering/subagents.ts   # this agent can spawn subagents
     writes:                        # the plan is all it may leave in the repo
       - specs/
+
+  - name: reviewer
+    coding_agent: codex
+    model: gpt-5.6-terra
+    thinking: high
+    tools: null
+    writes: []
 ```
 
 Five starter agents ship in the box: `planner`, `builder`, `scout` (read-only recon), `reviewer`, and `documenter`. There is no tester, because running a suite is a known command and therefore code.
@@ -351,7 +345,7 @@ Honest edges, because knowing them is cheaper than discovering them.
 | Failure | What actually happens | What to do |
 |---|---|---|
 | The test phase reports green on a fresh install | `quality.py` ships placeholder commands that exit 0. Three ADWs run them as their test phase | Wire your real commands into `quality.py` before trusting `adw_build_test`, `adw_plan_build_test`, or `adw_simple_sdlc`. This is the first thing to customize |
-| A bare model pattern | The same model sits under several providers, so `gemini-3.6-flash` matches three catalog entries and `agents.validate()` refuses to spawn | Always write `provider/model-id` |
+| A bare Pi model pattern | The same model can sit under several Pi providers, so `gemini-3.6-flash` may be ambiguous | Qualify Pi models as `provider/model-id` |
 | `just` is not installed | The stamped `justfile` is a convenience wrapper, nothing depends on it | Every recipe is a one-line `uv run` or `sqlite3` command. Open the justfile and run the line yourself |
 | A coding agent hangs silently | No events, no tokens, an empty `raw_output.jsonl`. The trace goes quiet rather than red | Query `processes` for what is alive and kill it children-first. A killed run finalizes its own trace to `fail` |
 | The synced triad drifts | Type, `## Report` example, and `output_type=` disagree, so every call burns correction rounds | Grep the type name and fix all three in one edit |

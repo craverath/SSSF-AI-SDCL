@@ -73,4 +73,4 @@ Deep specs, when needed: [references/config.md](references/config.md) · [refere
 
 ## v1 scope
 
-Default `coding_agent: pi`, default model `gemini-3.6-flash` via openrouter, thinking `medium`. `pi`, `claude_code`, and `codex` are all implemented and selectable per agent — see `references/config.md#harnesses`. `harness_engineering` (pi extensions) stays Pi-only; setting it on a `claude_code`/`codex` agent fails validation. The visualizer app ships in a later pass — observe via sqlite queries until then.
+The starter roster defaults to Claude Code Sonnet, with the reviewer on Codex GPT-5.6 Terra. `pi`, `claude_code`, and `codex` are all implemented and selectable per agent — see `references/config.md#harnesses`. `harness_engineering` (Pi extensions) stays Pi-only; setting it on a `claude_code`/`codex` agent fails validation. The visualizer app ships in a later pass — observe via sqlite queries until then.

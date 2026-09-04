@@ -18,8 +18,8 @@ Writes `adws/adw_sssf_config/sssf.config.yaml` — creating the directory if nee
 
 ```yaml
 defaults:
-  coding_agent: pi                 # pi | claude_code | codex — see references/config.md#harnesses
-  model: google/gemini-3.6-flash   # ALWAYS provider/model-id — a bare id is ambiguous
+  coding_agent: claude_code        # pi | claude_code | codex — see references/config.md#harnesses
+  model: sonnet
   thinking: medium                 # off | minimal | low | medium | high | xhigh | max
   harness_engineering: []          # pi extension names
   data_dir: adws/adw_data          # runtime home: {data_dir}/sessions/{adw_id}/{agent_name}/
@@ -30,8 +30,6 @@ observability:
 
 agents:
   - name: planner                  # ADW scripts name agents, never models
-    coding_agent: pi
-    model: google/gemini-3.6-flash
     thinking: high
     color: "#a78bfa"               # optional hex — this agent's lane color in the visualizer
     purpose: Turn a request into a plan the builder can implement without asking questions.
@@ -50,7 +48,7 @@ agents:
       - bash
 ```
 
-Every agent entry merges over `defaults`, so an entry only states what differs. Pi's builtin tools are `read`, `bash`, `edit`, `write` — a read-only recon agent gets `[read, bash]`; a builder omits `tools` altogether.
+Every agent entry merges over `defaults`, so an entry only states what differs. The starter reviewer overrides the defaults with `coding_agent: codex`, `model: gpt-5.6-terra`, and `tools: null` because Codex has no tool-allowlist flag.
 
 ## After generating
 

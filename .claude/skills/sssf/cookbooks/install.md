@@ -35,9 +35,9 @@ Re-running is safe. `install.py` preserves existing files — your config, promp
 
 ## Post-install checklist
 
-1. **Env** — `cp .env.sample .env`, then set `OPENROUTER_API_KEY` in `.env`. (The starter roster runs Pi. An agent set to `coding_agent: claude_code` or `coding_agent: codex` needs that CLI already installed and logged in — SSSF reads no credential for either; see `references/config.md#harnesses`.)
-2. **Pi is installed and on PATH** — `pi --version`. Set `PI_PATH` in `.env` if it is not (`CLAUDE_PATH` / `CODEX_PATH` likewise, for agents using those harnesses).
-3. **The model resolves** — the config's default `gemini-3.6-flash` must be a registered id in `~/.pi/agent/models.json`. Check with `pi --list-models` or read the file directly; see `references/config.md` for model resolution.
+1. **CLIs** — the starter roster needs authenticated `claude` and `codex` commands on PATH. Set `CLAUDE_PATH` or `CODEX_PATH` in `.env` only when the executable is elsewhere.
+2. **Models** — confirm Claude Code accepts `sonnet` and Codex accepts `gpt-5.6-terra` for the logged-in accounts.
+3. **Env** — `.env` is optional for the starter roster. Copy `.env.sample` only when adding path overrides or Pi provider keys.
 4. **Gitignore** — `install.py` appends `adws/adw_data/sessions/`, `adws/adw_data/sssf.db*`, and `.env` for you; confirm they landed. All three are runtime or secrets and must never be committed.
 5. **Git repo** — ADWs that end in a commit phase call `git_helper.commit_all`, which raises if the cwd is not a git repository. Run `git init` and make a first commit before using `adw_plan_build.py`, `adw_plan_build_test.py`, or `adw_simple_sdlc.py`. `adw_document.py` needs one too: it measures the change with `git diff` against a base ref (`main` by default, `--base` to override).
 6. **Smoke test** — `just demo` runs two cheap read-only workflows back to back, or run the smallest ADW directly:
