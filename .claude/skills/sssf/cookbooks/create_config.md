@@ -18,7 +18,7 @@ Writes `adws/adw_sssf_config/sssf.config.yaml` — creating the directory if nee
 
 ```yaml
 defaults:
-  coding_agent: claude_code        # pi | claude_code | codex — see references/config.md#harnesses
+  coding_agent: claude_code        # pi | claude_code | codex | kiro_cli | antigravity — see references/config.md#harnesses
   model: sonnet
   thinking: medium                 # off | minimal | low | medium | high | xhigh | max
   harness_engineering: []          # pi extension names

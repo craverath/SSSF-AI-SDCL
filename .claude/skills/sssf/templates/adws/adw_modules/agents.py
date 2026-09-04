@@ -147,7 +147,8 @@ def execute(run, phase: Phase, call: AgentCall) -> EnvelopeBase:
         # the entry saved to agent_map.json, continue the actual session.
         if result.session_id:
             session_id = result.session_id
-        run.add_usage(result.usage.total_tokens, result.usage.total_cost)
+        run.add_usage(result.usage.total_tokens, result.usage.total_cost,
+                      result.usage.credits)
         spent.merge(result.usage)
         latest = result
         return result
@@ -224,10 +225,12 @@ def execute(run, phase: Phase, call: AgentCall) -> EnvelopeBase:
                                  # phase paid for every attempt.
                                  tokens=spent.total_tokens,
                                  payload={"cost": spent.total_cost,
+                                          "credits": spent.credits,
                                           "usage": spent.model_dump(),
                                           "context_tokens": context.context_tokens,
                                           "context_window": context.context_window}))
-    run.console.agent_finished(agent.name, spent.total_tokens, spent.total_cost)
+    run.console.agent_finished(agent.name, spent.total_tokens, spent.total_cost,
+                               spent.credits)
     if envelope.status != "success":
         raise RuntimeError(f"{agent.name} reported status={envelope.status!r}: {envelope.summary}")
     return envelope

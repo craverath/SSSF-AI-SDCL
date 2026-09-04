@@ -8,7 +8,7 @@
 uv run <skill-dir>/scripts/install.py
 ```
 
-Run from the **target repo root** — the cwd is where everything lands. The repository-local skill directory is `.claude/skills/sssf` for Claude Code and `.agents/skills/sssf` for Codex. The installer preserves the integration from which it is invoked.
+Run from the **target repo root** — the cwd is where everything lands. The repository-local skill directory is `.claude/skills/sssf` for Claude Code, `.agents/skills/sssf` for Codex, and `.kiro/skills/sssf` for Kiro CLI. The installer preserves the integration from which it is invoked.
 
 ## What gets stamped
 

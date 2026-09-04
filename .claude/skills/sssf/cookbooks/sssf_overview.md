@@ -23,8 +23,8 @@ adws/
 │   ├── data_types.py            AgentCall, PhaseParams, Phase, Envelope + one output type per agent call
 │   ├── agents.py                load_config, validate, resolve entry → interface + model + thinking
 │   ├── runner.py                the Run object: run.phase(PhaseParams) → ph.call(AgentCall)
-│   ├── harnesses.py              adapter registry: coding_agent -> pi | claude_code | codex
-│   ├── agent_pi.py, agent_claudecode.py, agent_codex.py    one adapter per coding_agent
+│   ├── harnesses.py              adapter registry: coding_agent -> pi | claude_code | codex | kiro_cli | antigravity
+│   ├── agent_pi.py, agent_claudecode.py, agent_codex.py, agent_kirocli.py, agent_antigravity.py   one adapter per coding_agent
 │   ├── gates.py                 gate(envelope, run) -> GateReport — one check per item verified
 │   ├── changes.py               git diff vs a resolved base → ChangeSet → envelope for the documenter
 │   ├── prompts.py, session.py, tracer.py, console.py, git_helper.py, utils.py
@@ -38,7 +38,7 @@ adws/
     └── sssf.db                  gitignored SQLite trace db the visualizer polls
 ```
 
-**Default roster is mixed.** Planner, builder, scout, and documenter run Claude Code Sonnet; reviewer runs Codex GPT-5.6 Terra. `pi`, `claude_code`, and `codex` remain selectable per agent — see `references/config.md#harnesses`.
+**Default roster is mixed.** Planner, builder, scout, and documenter run Claude Code Sonnet; reviewer runs Codex GPT-5.6 Terra. `pi`, `claude_code`, `codex`, `kiro_cli`, and `antigravity` remain selectable per agent — see `references/config.md#harnesses`.
 
 ## The phase model
 

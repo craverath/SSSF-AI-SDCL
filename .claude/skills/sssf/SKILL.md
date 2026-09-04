@@ -50,7 +50,8 @@ You run the system, observe the system, and help the user interact with it. **Yo
 | create a new ADW / workflow | [cookbooks/create_adw.md](cookbooks/create_adw.md) |
 | modify an existing ADW chain | [cookbooks/update_adw.md](cookbooks/update_adw.md) |
 | create the config / agent roster | [cookbooks/create_config.md](cookbooks/create_config.md) |
-| add or retune an agent (model, thinking, tools, prompts) | [cookbooks/update_config.md](cookbooks/update_config.md) |
+| decide WHICH harness/model each agent should run | the `sssf-pick-models` skill, installed beside this one — it carries the catalogs |
+| add or retune an agent (prompts, tools, thinking, a model you already chose) | [cookbooks/update_config.md](cookbooks/update_config.md) |
 | extend adw_modules with new low-level logic | [cookbooks/update_modules.md](cookbooks/update_modules.md) |
 | run / monitor an ADW | [cookbooks/how_to_prompt_for_the_eng.md](cookbooks/how_to_prompt_for_the_eng.md) **first**, then [cookbooks/run_adw.md](cookbooks/run_adw.md) |
 | turn a request into an ADW prompt | [cookbooks/how_to_prompt_for_the_eng.md](cookbooks/how_to_prompt_for_the_eng.md) |
@@ -73,4 +74,4 @@ Deep specs, when needed: [references/config.md](references/config.md) · [refere
 
 ## v1 scope
 
-The starter roster defaults to Claude Code Sonnet, with the reviewer on Codex GPT-5.6 Terra. `pi`, `claude_code`, and `codex` are all implemented and selectable per agent — see `references/config.md#harnesses`. `harness_engineering` (Pi extensions) stays Pi-only; setting it on a `claude_code`/`codex` agent fails validation. The visualizer app ships in a later pass — observe via sqlite queries until then.
+The starter roster defaults to Claude Code Sonnet, with the reviewer on Codex GPT-5.6 Terra. `pi`, `claude_code`, `codex`, `kiro_cli`, and `antigravity` are all implemented and selectable per agent — see `references/config.md#harnesses`. `harness_engineering` (Pi extensions) stays Pi-only; setting it on any other harness fails validation. `tools:` is only honored by `pi` and `claude_code`: `codex`, `kiro_cli`, and `antigravity` have no allowlist flag to map onto, so they require `tools: null` and rely on `permissions.py` for the boundary. The visualizer app ships in a later pass — observe via sqlite queries until then.

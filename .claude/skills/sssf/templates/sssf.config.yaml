@@ -1,6 +1,7 @@
 # sssf.config.yaml — the factory's agent roster. One agent, one prompt, one purpose.
 # The starter roster runs Claude Code Sonnet, with Codex GPT-5.6 Terra for
-# review. Each agent may still select pi | claude_code | codex independently.
+# review. Each agent may still select pi | claude_code | codex | kiro_cli |
+# antigravity independently — see references/config.md#harnesses.
 defaults:
   coding_agent: claude_code
   model: sonnet
