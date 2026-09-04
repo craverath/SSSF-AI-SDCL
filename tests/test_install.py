@@ -1,3 +1,4 @@
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -7,6 +8,16 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = REPO_ROOT / "install.py"
 GRILL_SKILL = REPO_ROOT / ".claude/skills/sssf-grill-me/SKILL.md"
+
+
+def load_installer():
+    """The installer as a module. It is a script, not a package, and guards
+    main() behind __name__, so importing it only defines its constants."""
+    path = REPO_ROOT / ".claude/skills/sssf/scripts/install.py"
+    spec = importlib.util.spec_from_file_location("sssf_installer", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest.mark.parametrize(
@@ -21,6 +32,11 @@ GRILL_SKILL = REPO_ROOT / ".claude/skills/sssf-grill-me/SKILL.md"
             "codex",
             Path(".agents/skills/sssf"),
             Path(".agents/skills/sssf-grill-me"),
+        ),
+        (
+            "kiro",
+            Path(".kiro/skills/sssf"),
+            Path(".kiro/skills/sssf-grill-me"),
         ),
     ],
 )
@@ -59,8 +75,21 @@ def test_none_installs_factory_without_host_integration(tmp_path):
 
     assert "integration: none" in result.stdout
     assert (tmp_path / "adws/adw_modules/harnesses.py").is_file()
-    assert not (tmp_path / ".claude").exists()
-    assert not (tmp_path / ".agents").exists()
+    for host_dir in (".claude", ".agents", ".kiro"):
+        assert not (tmp_path / host_dir).exists()
+
+
+def test_visualizer_recipe_probes_every_integration():
+    """The obs recipe is committed, but which host stamped a given clone is
+    not, so it probes for each. The probe chain lives in two places — the
+    template a fresh install stamps, and the constant an existing justfile is
+    migrated to — and a new INTEGRATION_PATHS entry missing from either yields
+    a justfile that cannot find the app."""
+    installer = load_installer()
+    template = (REPO_ROOT / ".claude/skills/sssf/templates/justfile").read_text()
+    for path in installer.INTEGRATION_PATHS.values():
+        assert f'skill_dir="{path}"' in installer.PORTABLE_VISUALIZER_COMMAND
+        assert f'skill_dir="{path}"' in template
 
 
 def test_migrates_legacy_visualizer_path_without_replacing_justfile(tmp_path):

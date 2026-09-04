@@ -56,9 +56,11 @@ per turn and explicitly unit-labelled
 (`_meta.kiro.promptTurnSummaries[] = {"unit": "credit", "usage": 0.0275}`), so
 `usage.total_tokens` and `usage.total_cost` stay 0 rather than carry a number
 in the wrong unit — a credit is not a dollar, and the trace's cost column must
-not say it is. The credits figure stays verbatim in `raw_output.jsonl`; there
-is no field for it on `UsageBreakdown`, and inventing one whose other
-producers report dollars would be the same lie.
+not say it is. Kiro's own docs confirm there is nothing better to report:
+per-session token counts are "not currently available", account-level only.
+The credits go to `usage.credits`, a field whose whole purpose is to carry a
+non-dollar billing unit; folding them into `total_cost` would be the lie this
+avoids, and dropping them made a billed run read as "0 tokens · $0.0000".
 
 Context occupancy IS real and exact: `_meta.kiro.breakdown` reports absolute
 token counts per component (`contextFiles`, `kiroResponses`, `sessionFiles`,
@@ -196,6 +198,38 @@ def _label(tool: str, args: dict, title: str) -> str:
     return f"{tool}: {_clip(value, LABEL_CHARS)}" if value else tool
 
 
+def _is_internal_call(update: dict) -> bool:
+    """True when Kiro is reporting its OWN bookkeeping call, not the model's.
+
+    v3 names its internal calls in `_meta.kiro.toolId` and leaves that key
+    empty for a model-facing call, whose name survives only in the prose
+    `title` (see `_tool_name`). Measured on 2.21.0, every model-facing call
+    also carries a `tooluse`-prefixed `toolCallId` while internal ones carry a
+    bare uuid. The `toolName` guard keeps v2 semantics, where that key holds a
+    real tool name and must not be mistaken for bookkeeping.
+
+    Without this, `fetch_cloud_config` lands in the trace as though the agent
+    had chosen to call it, which inflates the tool count of every Kiro phase.
+    """
+    meta = (update.get("_meta") or {}).get("kiro") or {}
+    return bool(meta.get("toolId")) and not meta.get("toolName")
+
+
+def _turn_credits(meta: dict) -> float:
+    """Credits billed for this turn, from `_meta.kiro.promptTurnSummaries`.
+
+    Each `session_info_update` carries only its own turn's summary — measured
+    across a two-turn builder session, turn one reported 0.2213 and turn two
+    reported 0.2444 as single-element arrays, never cumulatively — so the
+    caller sums occurrences rather than taking the last one.
+    """
+    total = 0.0
+    for summary in meta.get("promptTurnSummaries") or []:
+        if isinstance(summary, dict) and summary.get("unit") == "credit":
+            total += float(summary.get("usage") or 0.0)
+    return total
+
+
 def _tool_name(update: dict) -> str:
     """The tool's id, by the most authoritative route available.
 
@@ -255,11 +289,23 @@ class ToolCallTracker:
 
     def __init__(self) -> None:
         self._open: dict[str, dict] = {}
+        # Call ids Kiro owns. Only the OPENING update identifies them: measured
+        # on 2.21.0, `fetch_cloud_config` announces itself with
+        # `_meta.kiro.toolId` and its closing `tool_call_update` carries an
+        # empty `_meta` and no title. Dropping updates one at a time therefore
+        # filtered the opener and let the closer through, and the closer — with
+        # no name anywhere and no open call to match — got traced as a call
+        # literally named "tool". The id is the only thing both updates share.
+        self._internal: set[str] = set()
 
     def observe(self, update: dict) -> Optional[dict]:
         kind = update.get("sessionUpdate")
         call_id = str(update.get("toolCallId") or "")
         if not call_id or kind not in ("tool_call", "tool_call_update"):
+            return None
+        if _is_internal_call(update):
+            self._internal.add(call_id)
+        if call_id in self._internal:
             return None
 
         if kind == "tool_call" or call_id not in self._open:
@@ -373,7 +419,14 @@ def run(request: HarnessRequest, on_event: Optional[Callable[[dict], None]] = No
                     tokens = _context_tokens(meta)
                     if tokens:
                         result.context_tokens = tokens
+                    # Credits, unlike occupancy, accumulate: each update bills
+                    # its own turn. Kiro reports no per-session token counts at
+                    # all, so this is the only cost signal the run ever gets.
+                    result.usage.credits += _turn_credits(meta)
                 else:
+                    # Kiro's own bookkeeping calls are filtered inside the
+                    # tracker, which is the only place that sees every update
+                    # of a given call id.
                     record = tracker.observe(update)
                     if record and on_event:
                         on_event(record)
@@ -415,8 +468,9 @@ class KiroCliAdapter:
                 f"--trust-tools takes the v3 engine's own tool ids, not Pi's "
                 "names, and an unrecognized name DENIES the tool rather than "
                 "allowing it (see agent_kirocli.py). Set tools: null explicitly "
-                "on this agent (it would otherwise inherit defaults.tools) or "
-                "switch to coding_agent: pi/claude_code")
+                "on this agent (it would otherwise inherit defaults.tools), or "
+                "set defaults.tools: null when the whole roster runs on kiro_cli "
+                "and/or antigravity, or switch to coding_agent: pi/claude_code")
         catalog = _model_catalog()
         if catalog and agent.model not in catalog:
             problems.append(

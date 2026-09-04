@@ -421,6 +421,13 @@ class UsageBreakdown(BaseModel):
     cache_read_cost: float = 0.0
     cache_write_cost: float = 0.0
     total_cost: float = 0.0
+    # Credits, for harnesses that bill in them instead of tokens and dollars.
+    # Deliberately NOT folded into total_cost: a credit is not a dollar, and its
+    # exchange rate is a per-model multiplier SSSF does not know. Kiro CLI is the
+    # case that motivated this — its docs state per-session token counts are not
+    # available at all, so credits are the only cost signal it emits, and without
+    # this field a whole Kiro run reports "0 tokens · $0.0000" and reads as free.
+    credits: float = 0.0
 
     def add_turn(self, usage: dict, total_tokens: int) -> None:
         """Fold in one pi `message_end` usage object.
@@ -443,7 +450,9 @@ class UsageBreakdown(BaseModel):
 
     def merge(self, other: "UsageBreakdown") -> None:
         """Add another call's usage — a phase that retries spends more than once."""
-        for field in self.model_fields:
+        # Read off the class, not the instance: Pydantic 2.11 deprecated the
+        # instance attribute and removes it in v3.
+        for field in type(self).model_fields:
             setattr(self, field, getattr(self, field) + getattr(other, field))
 
 

@@ -223,14 +223,78 @@ def test_tokens_and_cost_stay_zero(tmp_path, fake_cli_env):
     """Kiro CLI bills credits, not tokens or dollars. The context breakdown is
     occupancy, NOT consumption — usage.merge() sums across retries, so feeding
     occupancy into total_tokens would report a 3-retry phase as 3x the context.
-    Credits stay verbatim in raw_output.jsonl; UsageBreakdown has no field for
-    them, and its cost fields are dollars everywhere else."""
+    The credits land in usage.credits, whose unit is not dollars; the cost
+    fields stay 0 because a credit is not one."""
     fake_cli_env.set_lines(STREAM_LINES)
     result = agent_kirocli.KiroCliAdapter().run(_request(tmp_path))
     assert result.usage.total_tokens == 0
     assert result.usage.input_tokens == 0
     assert result.usage.output_tokens == 0
     assert result.usage.total_cost == 0.0
+    assert result.usage.credits == pytest.approx(0.0275470104145937)
+
+
+def test_credits_accumulate_across_turns_rather_than_last_winning(
+        tmp_path, fake_cli_env):
+    """Occupancy is a snapshot, credits are a bill. Each session_info_update
+    carries only its own turn's summary, so a second one adds rather than
+    replaces — the opposite of how context_tokens is handled."""
+    second_turn = {"type": "sessionUpdate",
+                   "data": {"sessionId": REAL_SESSION,
+                            "update": {"sessionUpdate": "session_info_update",
+                                       "_meta": {"kiro": {
+                                           "promptTurnSummaries": [
+                                               {"unit": "credit",
+                                                "usage": 0.5}]}}}}}
+    fake_cli_env.set_lines(STREAM_LINES + [second_turn])
+    result = agent_kirocli.KiroCliAdapter().run(_request(tmp_path))
+    assert result.usage.credits == pytest.approx(0.5275470104145937)
+
+
+def test_a_summary_in_another_unit_is_not_counted_as_credits(
+        tmp_path, fake_cli_env):
+    """The unit is explicit on the wire, so it is checked rather than assumed."""
+    other_unit = {"type": "sessionUpdate",
+                  "data": {"sessionId": REAL_SESSION,
+                           "update": {"sessionUpdate": "session_info_update",
+                                      "_meta": {"kiro": {
+                                          "promptTurnSummaries": [
+                                              {"unit": "token",
+                                               "usage": 9999}]}}}}}
+    fake_cli_env.set_lines(STREAM_LINES + [other_unit])
+    result = agent_kirocli.KiroCliAdapter().run(_request(tmp_path))
+    assert result.usage.credits == pytest.approx(0.0275470104145937)
+
+
+def test_kiros_own_bookkeeping_call_is_not_traced_as_a_tool_use(
+        tmp_path, fake_cli_env):
+    """`fetch_cloud_config` is Kiro fetching its own config, not the agent
+    choosing a tool. Captured verbatim from 2.21.0, including the detail that
+    matters: only the OPENING update identifies it (`_meta.kiro.toolId`), while
+    its closing `tool_call_update` carries an empty `_meta` and no title. A
+    filter applied per-update therefore drops the opener and lets the closer
+    through, which the tracker then reports as a call named "tool" — so the
+    whole call id has to be suppressed, not the updates that look internal."""
+    internal_id = "54c6445c-7cc1-4b90-9f1e-2c3d4e5f6a7b"
+    internal = [
+        {"type": "sessionUpdate",
+         "data": {"sessionId": REAL_SESSION,
+                  "update": {"sessionUpdate": "tool_call",
+                             "toolCallId": internal_id,
+                             "title": "Fetching your cloud config",
+                             "status": "pending",
+                             "_meta": {"kiro": {"toolId": "fetch_cloud_config"}}}}},
+        {"type": "sessionUpdate",
+         "data": {"sessionId": REAL_SESSION,
+                  "update": {"sessionUpdate": "tool_call_update",
+                             "toolCallId": internal_id,
+                             "status": "completed",
+                             "_meta": {}}}},
+    ]
+    fake_cli_env.set_lines(internal + STREAM_LINES)
+    events = []
+    agent_kirocli.KiroCliAdapter().run(_request(tmp_path), on_event=events.append)
+    assert [e["tool"] for e in events] == ["run_command"]
 
 
 def test_tool_events_are_forwarded_once_normalized(tmp_path, fake_cli_env):

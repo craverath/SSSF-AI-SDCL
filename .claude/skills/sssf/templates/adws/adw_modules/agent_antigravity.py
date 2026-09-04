@@ -360,8 +360,9 @@ class AntigravityAdapter:
                 "mode has no tool-allowlist flag to map onto; scoping lives in "
                 "`permissions.allow` in ~/.gemini/antigravity-cli/settings.json "
                 "(see agent_antigravity.py). Set tools: null explicitly on this "
-                "agent (it would otherwise inherit defaults.tools) or switch to "
-                "coding_agent: pi/claude_code")
+                "agent (it would otherwise inherit defaults.tools), or set "
+                "defaults.tools: null when the whole roster runs on kiro_cli "
+                "and/or antigravity, or switch to coding_agent: pi/claude_code")
         catalog = _model_slugs()
         if catalog and agent.model not in catalog:
             problems.append(

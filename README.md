@@ -52,17 +52,18 @@ The bill for skipping this is not only tokens. It is cost, speed, and consistenc
 
 Run the repository installer from the **target repo root** and select the host that should operate SSSF. This integration choice does not change the `coding_agent` configured for any workflow agent.
 
-**Prereqs:** [`uv`](https://docs.astral.sh/uv/), `sqlite3`, and the CLI used by each agent in your roster (`pi`, `claude`, or `codex`), already authenticated. [`bun`](https://bun.sh) is only needed for the visualizer.
+**Prereqs:** [`uv`](https://docs.astral.sh/uv/), `sqlite3`, and the CLI used by each agent in your roster (`pi`, `claude`, `codex`, `kiro-cli`, or `agy`), already authenticated. [`bun`](https://bun.sh) is only needed for the visualizer.
 
 ```bash
 # from the target repo root
 uv run /path/to/super-simple-software-factory/install.py --integration codex
 # or: --integration claude
+# or: --integration kiro
 # or: --integration none
 
 claude --version                                 # starter agents
 codex --version                                  # starter reviewer
-git init && git commit --allow-empty -m init     # chains that end in a commit phase need a repo
+git init && git add -A && git commit -m "stamp sssf"   # commit the factory BEFORE the first chain
 
 # smoke test: two cheap read-only runs, end to end
 just demo
@@ -73,7 +74,7 @@ just obs                   # the trace UI, needs bun
 uv run adws/adw_prompt.py "reply with a one-line summary of this repo" --agent scout
 ```
 
-`--integration codex` installs the repo-local skills at `.agents/skills/`, where Codex exposes them as `$sssf` and `$sssf-grill-me`. `--integration claude` installs them at `.claude/skills/`, where Claude Code exposes them as `/sssf` and `/sssf-grill-me`. `none` installs only the factory.
+`--integration codex` installs the repo-local skills at `.agents/skills/`, where Codex exposes them as `$sssf` and `$sssf-grill-me`. `--integration claude` installs them at `.claude/skills/`, where Claude Code exposes them as `/sssf` and `/sssf-grill-me`. `--integration kiro` installs them at `.kiro/skills/`, where Kiro CLI exposes them as `/sssf` and `/sssf-grill-me` — its default agent already carries `skill://.kiro/skills/*/SKILL.md`, so nothing needs configuring. `none` installs only the factory.
 
 Use `sssf-grill-me` when the initial request still needs product decisions. It inspects the relevant code, interviews the developer, and writes an approved `specs/YYYY-MM-DD-<slug>.md` without changing the application. Its instructions use only capabilities shared by coding harnesses, so the output contract is the same with Claude Code or Codex. The full workflow accepts either an inline prompt or a specification path:
 
@@ -115,7 +116,7 @@ There are three actors here, and the design keeps them separate on purpose: **th
   <img src="images/03_skill_stamp.svg" alt="The sssf skill directory on the left stamping config, adws, and prompt_engineering into three different target repos" width="780">
 </p>
 
-The same skill content is installed at `.claude/skills/sssf/` for Claude Code or `.agents/skills/sssf/` for Codex. The harness-neutral companion `sssf-grill-me` skill is installed beside it to turn ambiguous requests into approved specifications before a workflow starts. SSSF's `SKILL.md` carries the hard rules and routes each request to one of nine cookbooks. `references/` holds the deep specs, `scripts/` holds the generators, and `templates/` holds exactly what gets stamped.
+The same skill content is installed at `.claude/skills/sssf/` for Claude Code, `.agents/skills/sssf/` for Codex, or `.kiro/skills/sssf/` for Kiro CLI. The harness-neutral companion `sssf-grill-me` skill is installed beside it to turn ambiguous requests into approved specifications before a workflow starts. SSSF's `SKILL.md` carries the hard rules and routes each request to one of nine cookbooks. `references/` holds the deep specs, `scripts/` holds the generators, and `templates/` holds exactly what gets stamped.
 
 | What lands in your repo | Where it comes from | Tracked |
 |---|---|---|
@@ -269,6 +270,7 @@ The skill ships a read-only UI for this db under the selected integration direct
 ```bash
 cd .agents/skills/sssf/apps/visualizer && bun install   # Codex integration
 # Claude Code: .claude/skills/sssf/apps/visualizer
+# Kiro CLI:    .kiro/skills/sssf/apps/visualizer
 SSSF_DB=/abs/path/to/your-repo/adws/adw_data/sssf.db bun run server/index.ts &
 bunx vite
 ```
@@ -363,6 +365,9 @@ Honest edges, because knowing them is cheaper than discovering them.
 | Commit phase has nothing to commit | `commit_all` raises if the cwd is not a git repo or nothing changed | `git init` with one commit first. A no-op build fails the phase rather than committing nothing |
 | `install.py --force` | Overwrites **all** stamped files, config and prompts included | Commit before you force |
 | `harness_engineering` set on a `claude_code`/`codex` agent | It's Pi-only (pi extensions); `agents.validate()` fails objectively | Clear the list, or set `coding_agent: pi` |
+| An `antigravity` agent dies mid-turn | `agy` returns `Internal error encountered.` or `The stream was interrupted.` and the phase fails. Measured in 5 of 9 identical runs inside a ~380-file repo, 0 of 4 in a small one — it ingests the workspace, and a big context makes the upstream stream unreliable | Re-run with `--adw-id` to retry only the failed phase. SSSF will not auto-resume: a stream-killed turn can poison the conversation so every later request on it fails |
+| A `kiro_cli` phase reports 0 tokens | Correct, not a bug: Kiro's docs state per-session token counts are unavailable. It bills credits, which appear in `usage.credits`, `sessions.total_credits`, and the console line | Read credits, not tokens, for Kiro. A mixed roster's `total_tokens` undercounts by design |
+| The first chain in a fresh repo commits the whole factory | `commit_all` is `git add -A`, so anything the install left untracked lands in the builder's commit under the builder's message | Commit the stamped factory yourself right after `install.py`, before the first chain |
 
 Also missing on purpose, so you know what to add: this runs on your current branch. For real work you want a branch per run, a sandbox around the agent, and a merge step at the end.
 
