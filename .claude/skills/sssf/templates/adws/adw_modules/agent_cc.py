@@ -16,9 +16,11 @@ Tools: Pi's tool vocabulary (read, bash, edit, write, grep, find) is not
 Claude Code's (Read, Bash, Edit, Write, Grep, Glob) — TOOL_MAP is the small,
 direct translation, and `validate()` rejects any `agent.tools` entry that
 isn't in it (Pi's `ls` has no Claude Code equivalent, so it fails loudly
-rather than being dropped or passed through untranslated). The prompt is sent
-through stdin because Claude's variadic `--tools` option can consume a trailing
-positional prompt.
+rather than being dropped or passed through untranslated). Each mapped tool is
+both exposed with `--tools` and pre-approved with `--allowedTools`: print mode
+has nobody to answer an interactive permission prompt, so merely exposing
+Write/Edit/Bash would leave them unusable. The prompt is sent through stdin
+because both variadic options can consume a trailing positional prompt.
 
 Effort: Claude Code's `--effort` only accepts low/medium/high/xhigh/max —
 Pi's off/minimal have no equivalent, so `validate()` rejects them too.
@@ -114,9 +116,12 @@ def run(request: HarnessRequest, on_event: Optional[Callable[[dict], None]] = No
     if resumable:
         cmd += ["--resume", resumable]
     if request.tools:
-        # ONE comma-joined token, per --tools' own documented form ("Bash,Edit,Read").
-        # The flag is variadic, so the prompt is supplied through stdin below.
-        cmd += ["--tools", ",".join(_map_tools(request.tools))]
+        mapped_tools = ",".join(_map_tools(request.tools))
+        # `--tools` controls availability; it does not approve permission
+        # prompts. There is no interactive approver under `--print`, so grant
+        # the same bounded list explicitly. permissions.enforce() still checks
+        # the agent's narrower repo write scope after the process exits.
+        cmd += ["--tools", mapped_tools, "--allowedTools", mapped_tools]
     raw_path = Path(request.raw_output_path)
     raw_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -124,7 +129,7 @@ def run(request: HarnessRequest, on_event: Optional[Callable[[dict], None]] = No
     pending: dict[str, dict] = {}   # tool_use id -> {tool, args}, until its tool_result arrives
 
     # Claude documents stdin as a prompt source for --print. This also keeps the
-    # variadic --tools option from consuming a trailing positional prompt.
+    # variadic tool options from consuming a trailing positional prompt.
     process = subprocess.Popen(cmd, stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                text=True, bufsize=1, cwd=request.cwd,

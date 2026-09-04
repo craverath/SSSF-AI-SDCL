@@ -119,14 +119,14 @@ def test_validate_accepts_no_harness_engineering():
 
 # ── tool mapping ──────────────────────────────────────────────────────────────
 
-def test_tools_are_translated_and_sent_as_one_comma_joined_argument(tmp_path, fake_cli_env):
-    """--tools is documented as ONE comma-separated string ("Bash,Edit,Read"),
-    not separate argv tokens — passed as separate tokens the flag is variadic
-    enough to also swallow the trailing prompt as another "tool name"."""
+def test_tools_are_translated_exposed_and_preapproved(tmp_path, fake_cli_env):
+    """Print mode cannot answer permission prompts, so configured tools must
+    be both exposed and approved as the same bounded, comma-separated list."""
     fake_cli_env.set_lines(STREAM_LINES)
     agent_cc.ClaudeCodeAdapter().run(_request(tmp_path, tools=["read", "bash", "edit"]))
     argv = fake_cli_env.argv()
     assert argv[argv.index("--tools") + 1] == "Read,Bash,Edit"
+    assert argv[argv.index("--allowedTools") + 1] == "Read,Bash,Edit"
 
 
 def test_prompt_is_sent_through_stdin_so_tools_cannot_swallow_it(tmp_path, fake_cli_env):
