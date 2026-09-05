@@ -76,7 +76,7 @@ uv run adws/adw_prompt.py "reply with a one-line summary of this repo" --agent s
 
 `--integration codex` installs the repo-local skills at `.agents/skills/`, where Codex exposes them as `$sssf`, `$sssf-grill-me`, and `$sssf-pick-models`. `--integration claude` installs them at `.claude/skills/`, where Claude Code exposes them as `/sssf`, `/sssf-grill-me`, and `/sssf-pick-models`. `--integration kiro` installs them at `.kiro/skills/`, where Kiro CLI exposes the same three — its default agent already carries `skill://.kiro/skills/*/SKILL.md`, so nothing needs configuring. `none` installs only the factory.
 
-Use `sssf-grill-me` when the initial request still needs product decisions. It inspects the relevant code, interviews the developer, and writes an approved `specs/YYYY-MM-DD-<slug>.md` without changing the application. Its instructions use only capabilities shared by coding harnesses, so the output contract is the same with Claude Code or Codex.
+Use `sssf-grill-me` when the initial request still needs product decisions. It inspects the relevant code, interviews the developer, and writes an approved `specs/YYYY-MM-DD-<slug>.md` without changing the application. Its instructions use only capabilities shared by coding harnesses, so the output contract is the same in Claude Code, Codex, and Kiro CLI.
 
 Use `sssf-pick-models` right after installing, to decide which harness and model runs each agent. It carries the model tables for all five harnesses, shows what each role is actually buying, and writes the result into `sssf.config.yaml` with the keys a harness switch forces — the `tools: null` that codex, kiro_cli, and antigravity all require, which is what makes a hand edit fail `agents.validate()`.
 
@@ -145,7 +145,7 @@ There is no DSL here. No framework to learn. It is Python, YAML, agents, and a s
 
 ```yaml
 defaults:
-  coding_agent: claude_code        # pi | claude_code | codex — selectable per agent
+  coding_agent: claude_code        # pi | claude_code | codex | kiro_cli | antigravity
   model: sonnet
   thinking: medium                 # off | minimal | low | medium | high | xhigh | max
   protected_files:                 # no agent may edit the machinery that grades it
@@ -345,7 +345,7 @@ uv run adws/adw_build_test.py "implement the plan" --adw-id a1b2c3d4
 Watch a run with the trace db directly:
 
 ```bash
-sqlite3 adws/adw_data/sssf.db "select adw_id, status, substr(request,1,60), total_tokens from sessions order by started_at desc limit 10;"
+sqlite3 adws/adw_data/sssf.db "select adw_id, status, substr(request,1,60), total_tokens, total_cost, total_credits from sessions order by started_at desc limit 10;"
 sqlite3 adws/adw_data/sssf.db "select seq, name, kind, owner, status from phases where adw_id='a1b2c3d4' order by seq;"
 sqlite3 adws/adw_data/sssf.db "select kind, name, pid, command from processes where adw_id='a1b2c3d4' and ended_at is null;"
 ```
@@ -369,9 +369,9 @@ Honest edges, because knowing them is cheaper than discovering them.
 | An agent edits something it should not | Detected and rolled back after the call, and the phase fails | Expected. Widen that agent's `writes` if the change was legitimate |
 | Commit phase has nothing to commit | `commit_all` raises if the cwd is not a git repo or nothing changed | `git init` with one commit first. A no-op build fails the phase rather than committing nothing |
 | `install.py --force` | Overwrites **all** stamped files, config and prompts included | Commit before you force |
-| `harness_engineering` set on a `claude_code`/`codex` agent | It's Pi-only (pi extensions); `agents.validate()` fails objectively | Clear the list, or set `coding_agent: pi` |
+| `harness_engineering` set on any non-Pi agent | It's Pi-only (pi extensions); `agents.validate()` fails objectively | Clear the list, or set `coding_agent: pi` |
 | An `antigravity` agent dies mid-turn | `agy` returns `Internal error encountered.` or `The stream was interrupted.` and the phase fails. Measured in 5 of 9 identical runs inside a ~380-file repo, 0 of 4 in a small one — it ingests the workspace, and a big context makes the upstream stream unreliable | Re-run with `--adw-id` to retry only the failed phase. SSSF will not auto-resume: a stream-killed turn can poison the conversation so every later request on it fails |
-| A `kiro_cli` phase reports 0 tokens | Correct, not a bug: Kiro's docs state per-session token counts are unavailable. It bills credits, which appear in `usage.credits`, `sessions.total_credits`, and the console line | Read credits, not tokens, for Kiro. A mixed roster's `total_tokens` undercounts by design |
+| A `kiro_cli` phase reports 0 tokens | Correct, not a bug: Kiro's docs state per-session token counts are unavailable. It bills credits, shown by `just sessions`, the visualizer, and the console | Read credits, not tokens, for Kiro. A mixed roster's `total_tokens` undercounts by design |
 | The first chain in a fresh repo commits the whole factory | `commit_all` is `git add -A`, so anything the install left untracked lands in the builder's commit under the builder's message | Commit the stamped factory yourself right after `install.py`, before the first chain |
 
 Also missing on purpose, so you know what to add: this runs on your current branch. For real work you want a branch per run, a sandbox around the agent, and a merge step at the end.

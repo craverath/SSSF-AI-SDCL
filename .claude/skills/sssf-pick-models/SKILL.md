@@ -140,9 +140,9 @@ When the **whole** roster moves to codex/kiro_cli/antigravity, set
 **`tools: null` must REPLACE the agent's existing list, not join it.** In the
 starter roster, planner, builder, scout, and documenter each carry their own
 `tools:` list. Adding a second `tools:` key to the same entry is silently
-useless — YAML resolves a duplicate key by last-one-wins, so the original list
-survives and validation still fails, pointing at a list you thought you had
-removed. Delete the list and its items, then write `tools: null` in its place.
+ambiguous and parser-dependent; with the loader used here, the last duplicate
+key wins. Do not rely on ordering to override the old value. Delete the list
+and its items, then write `tools: null` in its place.
 
 Two consequences worth stating out loud before saving:
 

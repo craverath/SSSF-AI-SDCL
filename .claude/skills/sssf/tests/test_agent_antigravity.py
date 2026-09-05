@@ -166,9 +166,45 @@ def test_response_conversation_id_and_real_token_usage_are_extracted(
     assert result.usage.reasoning_tokens == 616
     # Reported, not summed: cache reads are a subset of input here.
     assert result.usage.total_tokens == 11072
-    assert result.context_tokens == 11072
+    # Cumulative conversation usage is not current context occupancy.
+    assert result.context_tokens == 0
     # Antigravity bills AI credits and reports no dollars.
     assert result.usage.total_cost == 0.0
+
+
+def test_resumed_turn_bills_step_usage_not_cumulative_result_usage(
+        tmp_path, fake_cli_env):
+    """A resumed result repeats all prior usage; only this process's completed
+    steps may be added to session spend."""
+    first_step = {"input_tokens": 20, "output_tokens": 5,
+                  "cache_read_tokens": 12, "thinking_tokens": 2,
+                  "total_tokens": 25}
+    second_step = {"input_tokens": 30, "output_tokens": 10,
+                   "cache_read_tokens": 18, "thinking_tokens": 4,
+                   "total_tokens": 40}
+    cumulative = {"input_tokens": 220, "output_tokens": 80,
+                  "cache_read_tokens": 130, "thinking_tokens": 25,
+                  "total_tokens": 300}
+    lines = [
+        _step(step_index=8, state="DONE", step_type="agent_response",
+              text_delta="part one", usage=first_step),
+        _step(step_index=9, state="DONE", step_type="agent_response",
+              text_delta="part two", usage=second_step),
+        {"event": "result",
+         "result": {"conversation_id": CONVERSATION, "status": "SUCCESS",
+                    "response": "done", "usage": cumulative}},
+    ]
+    fake_cli_env.set_lines(lines)
+
+    result = agent_antigravity.AntigravityAdapter().run(
+        _request(tmp_path, session_id=CONVERSATION))
+
+    assert result.usage.input_tokens == 50
+    assert result.usage.output_tokens == 15
+    assert result.usage.cache_read_tokens == 30
+    assert result.usage.reasoning_tokens == 6
+    assert result.usage.total_tokens == 65
+    assert result.context_tokens == 0
 
 
 def test_an_empty_response_falls_back_to_the_streamed_deltas(tmp_path, fake_cli_env):

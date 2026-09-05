@@ -32,9 +32,12 @@ are still parsed — a real run confirms `--output-format stream-json` and
 requested model, `init.permission_mode` echoes `always-proceed`). Had `-p` been
 a boolean, every flag after the prompt would have been silently dropped.
 
-Usage is the richest of any adapter here: `result.usage` reports real token
-counts, so tokens reconcile with what the CLI itself prints. It reports no
-dollars — Antigravity bills AI credits — so `usage.total_cost` stays 0 rather
+Usage is the richest of any adapter here: completed `step_update.usage` values
+report the tokens spent by this CLI invocation, so they are summed into the
+call's usage. The terminal `result.usage` is cumulative across the resumed
+conversation, so it is neither billed again nor presented as context occupancy:
+it includes previous turns rather than measuring the current window. Antigravity
+reports no dollars — it bills AI credits — so `usage.total_cost` stays 0 rather
 than carry a number in the wrong unit.
 
 Tools: `tools:` cannot be honored, and nothing is invented to pretend
@@ -180,6 +183,19 @@ def _tool_record(step: dict, started_at: Optional[str]) -> dict:
     return record
 
 
+def _add_step_usage(result: HarnessResult, usage: dict) -> None:
+    """Add one completed step's usage, which is local to this invocation."""
+    input_tokens = usage.get("input_tokens") or 0
+    output_tokens = usage.get("output_tokens") or 0
+    result.usage.input_tokens += input_tokens
+    result.usage.output_tokens += output_tokens
+    result.usage.cache_read_tokens += usage.get("cache_read_tokens") or 0
+    result.usage.reasoning_tokens += usage.get("thinking_tokens") or 0
+    # Cache reads and thinking are subsets of input and output respectively.
+    result.usage.total_tokens += (usage.get("total_tokens")
+                                  or input_tokens + output_tokens)
+
+
 def _model_effort(model: str) -> str:
     """The effort tier baked into a model slug, or "" when it carries none.
 
@@ -297,6 +313,8 @@ def run(request: HarnessRequest, on_event: Optional[Callable[[dict], None]] = No
                 step = event.get("step_update") or {}
                 result.session_id = step.get("conversation_id") or result.session_id
                 step_type = step.get("step_type")
+                if step.get("state") == "DONE" and isinstance(step.get("usage"), dict):
+                    _add_step_usage(result, step["usage"])
                 if step_type == "agent_response":
                     streamed.append(step.get("text_delta") or "")
                 elif step_type == "tool":
@@ -315,15 +333,8 @@ def run(request: HarnessRequest, on_event: Optional[Callable[[dict], None]] = No
                 # `response` is authoritative for the turn that emitted it; the
                 # streamed deltas are the fallback when it comes back empty.
                 result.text = payload.get("response") or "".join(streamed)
-                usage = payload.get("usage") or {}
-                result.usage.input_tokens = usage.get("input_tokens") or 0
-                result.usage.output_tokens = usage.get("output_tokens") or 0
-                result.usage.cache_read_tokens = usage.get("cache_read_tokens") or 0
-                result.usage.reasoning_tokens = usage.get("thinking_tokens") or 0
-                # Reported directly rather than summed: cache reads are a subset
-                # of input here, not an additional component.
-                result.usage.total_tokens = usage.get("total_tokens") or 0
-                result.context_tokens = result.usage.total_tokens
+                # Terminal usage is cumulative for the whole conversation, so
+                # it is neither this invocation's spend nor context occupancy.
 
     result.returncode = process.wait()
     stderr = stderr_getter()

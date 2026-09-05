@@ -133,7 +133,7 @@ The `HarnessResult` fields a harness can actually fill differ, and the trace sho
 | `claude_code` | yes | yes, dollars | yes (last turn's total) |
 | `codex` | yes | no | yes (last turn's total), window unknown |
 | `kiro_cli` | **no** | **no** — bills credits, reported in `usage.credits` | yes, exact: summed from its own context breakdown |
-| `antigravity` | yes | no — bills AI credits, not exposed per turn | yes (last turn's total), window unknown |
+| `antigravity` | yes | no — bills AI credits, not exposed per turn | no — cumulative conversation usage is not occupancy |
 
 Kiro CLI reports neither billed tokens nor dollars: it bills **credits**, per turn and explicitly unit-labelled (`_meta.kiro.promptTurnSummaries[] = {"unit": "credit", "usage": 0.0275}`). Kiro's own docs confirm nothing better exists to report — per-session token counts are "not currently available", account-level only. `usage.total_tokens` and `usage.total_cost` therefore stay 0 for a `kiro_cli` agent, so a roster's `sessions.total_tokens` will undercount if it mixes Kiro with other harnesses. The credits land in `usage.credits`, a field that exists precisely to carry a non-dollar billing unit, and are summed onto `sessions.total_credits`; the console prints them beside the tokens whenever a run billed any. They are deliberately **not** folded into `total_cost`: a credit is not a dollar, and its exchange rate is a per-model `rate_multiplier` SSSF does not know.
 
