@@ -14,6 +14,7 @@ import type {
 import { Bot, SquareTerminal, UserRound } from 'lucide-vue-next'
 import { fetchEnvelopes, fetchEvents, fetchGates, fetchSession } from '../lib/api'
 import { axisTicks, fmtDate, payloadOk, ts } from '../lib/format'
+import { serverNow } from '../lib/clock'
 import { modelIcon, modelName } from '../lib/models'
 import { agentColor, hexAlpha, parseAgentStart } from '../lib/events'
 import { navigate, phaseCrumb } from '../lib/router'
@@ -32,7 +33,7 @@ const envelopes = ref<Envelope[]>([])
 const gates = ref<GateResult[]>([])
 const apiError = ref<string | null>(null)
 const loaded = ref(false)
-const nowMs = ref(Date.now())
+const nowMs = ref(serverNow())
 
 let cursor = 0
 let inflight = false
@@ -69,7 +70,7 @@ async function tick() {
       gates.value = g
     }
 
-    nowMs.value = Date.now()
+    nowMs.value = serverNow()
     apiError.value = null
     loaded.value = true
   } catch (err) {

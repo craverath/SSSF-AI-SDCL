@@ -23,6 +23,7 @@ import {
   SquareTerminal,
 } from 'lucide-vue-next'
 import { fmtClock, payloadOk, ts } from '../lib/format'
+import { serverNow } from '../lib/clock'
 import { highlightJson, highlightJsonText } from '../lib/highlight'
 import { eventLabel, parseAgentStart, parseToolCall } from '../lib/events'
 import { modelIcon, modelName } from '../lib/models'
@@ -153,7 +154,7 @@ const requestText = computed(() => {
 const phaseDurationMs = computed(() => {
   const start = ts(props.phase.started_at)
   if (!Number.isFinite(start)) return NaN
-  const end = props.phase.status === 'running' ? Date.now() : ts(props.phase.ended_at)
+  const end = props.phase.status === 'running' ? serverNow() : ts(props.phase.ended_at)
   return Number.isFinite(end) ? end - start : NaN
 })
 
