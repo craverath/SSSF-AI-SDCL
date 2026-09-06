@@ -38,7 +38,7 @@ Re-running is safe. `install.py` preserves existing files — your config, promp
 1. **CLIs** — the starter roster needs authenticated `claude` and `codex` commands on PATH. Set `CLAUDE_PATH` or `CODEX_PATH` in `.env` only when the executable is elsewhere.
 2. **Models** — confirm Claude Code accepts `sonnet` and Codex accepts `gpt-5.6-terra` for the logged-in accounts.
 3. **Env** — `.env` is optional for the starter roster. Copy `.env.sample` only when adding path overrides or Pi provider keys.
-4. **Gitignore** — `install.py` appends `adws/adw_data/sessions/`, `adws/adw_data/sssf.db*`, and `.env` for you; confirm they landed. All three are runtime or secrets and must never be committed.
+4. **Gitignore** — `install.py` appends `adws/adw_data/sessions/`, `adws/adw_data/sssf.db*`, `.env`, `__pycache__/`, `*.pyc`, and `node_modules/` for you; confirm they landed. They are runtime, bytecode, dependencies, or secrets, and must never be committed. `node_modules/` is not cosmetic: `permissions.snapshot()` lists untracked files, so an unignored dependency tree that appears mid-run is attributed to the agent and rolled back file by file. The stamped visualizer carries its own `.gitignore` for the same reason.
 5. **Git repo** — ADWs that end in a commit phase call `git_helper.commit_all`, which raises if the cwd is not a git repository. Run `git init` and make a first commit before using `adw_plan_build.py`, `adw_plan_build_test.py`, or `adw_simple_sdlc.py`. `adw_document.py` needs one too: it measures the change with `git diff` against a base ref (`main` by default, `--base` to override).
 6. **Smoke test** — `just demo` runs two cheap read-only workflows back to back, or run the smallest ADW directly:
 

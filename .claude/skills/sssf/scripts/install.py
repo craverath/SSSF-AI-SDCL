@@ -74,6 +74,12 @@ GITIGNORE_ENTRIES = [
     # first repo that was ever installed into from scratch.
     "__pycache__/",
     "*.pyc",
+    # Any untracked dependency tree in the repo reads as an agent write, because
+    # permissions.snapshot() lists untracked files. The visualizer carries its
+    # own .gitignore for the copy stamped under the integration directory; this
+    # entry covers the host repo's own node_modules, which is the same breach
+    # vector whenever the repo SSSF is stamped into is a JS project.
+    "node_modules/",
 ]
 
 

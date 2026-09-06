@@ -53,6 +53,56 @@ def test_installs_selected_integration(tmp_path, integration, skill_path):
     assert "simple-sdlc *ARGS:" not in installed_justfile
 
 
+@pytest.mark.parametrize(
+    ("integration", "skill_path"),
+    [
+        ("claude", Path(".claude/skills/sssf")),
+        ("codex", Path(".agents/skills/sssf")),
+        ("kiro", Path(".kiro/skills/sssf")),
+    ],
+)
+def test_visualizer_artifacts_stay_out_of_the_permission_snapshot(
+    tmp_path, integration, skill_path
+):
+    """`just obs` runs `bun install` inside the stamped visualizer, and
+    permissions.snapshot() fingerprints untracked files with exactly the
+    `git ls-files` call below. Unignored, those ~5.7k paths appear after a
+    phase's `before` snapshot and enforce() attributes them to the running
+    agent: a planner limited to `specs/` failed on 5671 breaching paths and the
+    rollback unlinked every dependency file. Asserting on the real git output
+    rather than on GITIGNORE_ENTRIES is deliberate — a correct constant with an
+    unanchored or misplaced pattern still leaves the breach in place."""
+    subprocess.run(
+        [sys.executable, str(INSTALLER), "--integration", integration],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+
+    visualizer = tmp_path / skill_path / "apps/visualizer"
+    for artifact in ("node_modules/vite/package.json", "dist/assets/index.js"):
+        path = visualizer / artifact
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}")
+    # The host repo's own dependencies are the same breach vector whenever SSSF
+    # is stamped into a JS project, and no per-app .gitignore covers them.
+    host_dependency = tmp_path / "node_modules/left-pad/index.js"
+    host_dependency.parent.mkdir(parents=True, exist_ok=True)
+    host_dependency.write_text("module.exports = 0;")
+
+    untracked = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+
+    assert [p for p in untracked if "node_modules" in p or "/dist/" in p] == []
+
+
 def test_every_companion_skill_on_disk_is_registered_for_install():
     """The installer stamps `sssf` plus a fixed tuple, so a companion skill
     added to the source tree and not to that tuple exists in the repo and ships
