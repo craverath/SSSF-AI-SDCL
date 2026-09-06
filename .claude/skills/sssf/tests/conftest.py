@@ -55,6 +55,16 @@ def fake_cli_env(tmp_path, monkeypatch):
         def set_catalog(self, line: str) -> None:
             monkeypatch.setenv("FAKE_PI_CATALOG", line)
 
+        def set_kiro_models(self, payload: dict) -> None:
+            """The JSON catalog `kiro-cli chat --list-models --format json` returns."""
+            monkeypatch.setenv("FAKE_KIRO_MODELS", json.dumps(payload))
+
+        def set_agy_models(self, rows: dict[str, str]) -> None:
+            """The `<slug>\\t<Display Name>` rows `agy models` returns."""
+            monkeypatch.setenv(
+                "FAKE_AGY_MODELS",
+                "\n".join(f"{slug}\t{name}" for slug, name in rows.items()))
+
         def set_stderr_bytes(self, count: int) -> None:
             """Have the fake CLI blast `count` bytes to stderr in one write,
             right after its first stdout line — see fixtures/fake_cli.py."""

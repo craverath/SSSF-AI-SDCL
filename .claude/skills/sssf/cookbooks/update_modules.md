@@ -12,11 +12,13 @@ Extend `adws/adw_modules/` with new low-level logic.
 |---|---|
 | `data_types.py` | Every Pydantic model: `AgentCall`, `PhaseParams`, `Phase`, `EnvelopeBase` + one output type per agent call, the config models (`AgentConfig`, `SSSFConfig`), `EventRecord`, and the harness contract (`HarnessRequest`/`HarnessResult`) |
 | `agents.py` | `load_config`, `validate`, resolving an entry → adapter (via `harnesses.resolve`) + model + thinking + harness extensions. Never branches on a specific `coding_agent` value itself |
-| `harnesses.py` | the `HarnessAdapter` Protocol and the `ADAPTERS` registry (`pi` / `claude_code` / `codex` → adapter instance) |
+| `harnesses.py` | the `HarnessAdapter` Protocol and the `ADAPTERS` registry (`pi` / `claude_code` / `codex` / `kiro_cli` / `antigravity` → adapter instance) |
 | `runner.py` | the `Run` object; `run.phase(PhaseParams)` context manager; `ph.call(AgentCall)` |
 | `agent_pi.py` | the Pi adapter — non-interactive `pi -p --mode json`, JSONL stream tailed live, model resolved against `~/.pi/agent/models.json`; `--session-id` creates-or-continues, so running and continuing an agent are the same call |
 | `agent_claudecode.py` | the Claude Code adapter — `claude -p --output-format stream-json`, `--resume <uuid>` to continue a real session |
 | `agent_codex.py` | the Codex adapter — `codex exec --json`, `codex exec resume <thread_id> --json` to continue |
+| `agent_kirocli.py` | the Kiro CLI adapter — `kiro-cli chat --agent-engine v3 --output-format stream-json` (ACP events), `--resume-id <id>` to continue. Engine pinned because v2 silently ignores `--model` |
+| `agent_antigravity.py` | the Antigravity adapter — `agy -p --output-format stream-json` (init / step_update / result), `--conversation <uuid>` to continue |
 | `gates.py` | validation gates over envelope claims |
 | `changes.py` | deterministic change capture: resolve the base ref, `git diff` into `context_handoff/changes.diff`, adapt the `ChangeSet` into an envelope an agent can be handed |
 | `prompts.py` | load system/user prompt refs from config, render placeholders |

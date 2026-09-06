@@ -243,6 +243,7 @@ const hiddenRowCount = computed(() =>
     </div>
     <div class="card-stats">
       <StatChip kind="cost" :value="session.total_cost" />
+      <StatChip v-if="session.total_credits" kind="credits" :value="session.total_credits" />
       <StatChip kind="runtime" :value="durationMs" />
       <StatChip kind="tokens" :value="session.total_tokens" />
     </div>

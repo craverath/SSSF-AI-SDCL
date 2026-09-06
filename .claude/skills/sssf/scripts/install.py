@@ -5,7 +5,7 @@
 """Install the SSSF factory and its selected host integration into the cwd.
 
 Usage:
-    uv run <skill>/scripts/install.py [--integration claude|codex|none] [--force]
+    uv run <skill>/scripts/install.py [--integration claude|codex|kiro|none] [--force]
 
 Stamps: adws/ (modules + starter ADWs), adws/adw_data/prompt_engineering/
 (starter agents), adws/adw_sssf_config/sssf.config.yaml, .env.sample,
@@ -24,9 +24,13 @@ TEMPLATES = SKILL_ROOT / "templates"
 INTEGRATION_PATHS = {
     "claude": Path(".claude/skills/sssf"),
     "codex": Path(".agents/skills/sssf"),
+    # Kiro CLI's default agent carries `skill://.kiro/skills/*/SKILL.md`, so a
+    # skill one level down from `.kiro/skills/` is discovered with no agent
+    # config, exposed as /sssf exactly like Claude Code's.
+    "kiro": Path(".kiro/skills/sssf"),
 }
 
-COMPANION_SKILLS = ("sssf-grill-me",)
+COMPANION_SKILLS = ("sssf-grill-me", "sssf-pick-models")
 
 IGNORED_SOURCE_NAMES = {
     "__pycache__",
@@ -38,8 +42,14 @@ IGNORED_SOURCE_NAMES = {
 
 LEGACY_VISUALIZER_COMMAND = "cd .claude/skills/sssf/apps/visualizer"
 PORTABLE_VISUALIZER_COMMAND = (
+    # The justfile is committed but the integration directory is a per-clone
+    # choice, so the recipe probes every known host instead of hardcoding the
+    # one selected at install time. A new host must be added here too —
+    # test_visualizer_recipe_probes_every_integration holds this to
+    # INTEGRATION_PATHS.
     'skill_dir=".agents/skills/sssf"; '
     '[ -d "$skill_dir" ] || skill_dir=".claude/skills/sssf"; '
+    '[ -d "$skill_dir" ] || skill_dir=".kiro/skills/sssf"; '
     '[ -d "$skill_dir" ] || { echo "SSSF integration not installed" >&2; exit 1; }; '
     'cd "$skill_dir/apps/visualizer"'
 )
@@ -206,10 +216,14 @@ def main() -> int:
         print(f"  skipped (already exist, use --force to overwrite): {len(skipped)}")
     print("\nnext steps:")
     print("  1. cp .env.sample .env   # then set the key(s) your roster needs")
-    print("  2. just demo             # two cheap read-only runs, end to end")
-    print("  3. just sessions         # what just happened")
-    print("  4. just obs              # the trace UI, needs bun")
-    print("\n  no just? the raw form of step 2 is:")
+    # Any chain ending in a commit phase runs `git add -A`, so whatever this
+    # install left untracked would land in the builder's commit under the
+    # builder's message. Committing here keeps the factory out of it.
+    print("  2. git add -A && git commit -m 'stamp sssf'   # BEFORE the first chain")
+    print("  3. just demo             # two cheap read-only runs, end to end")
+    print("  4. just sessions         # what just happened")
+    print("  5. just obs              # the trace UI, needs bun")
+    print("\n  no just? the raw form of step 3 is:")
     print('     uv run adws/adw_prompt.py "say hello" --agent scout')
     return 0
 

@@ -15,7 +15,8 @@ import pytest
 from adw_modules import agents, harnesses, session
 from adw_modules.data_types import (AgentCall, AgentConfig, GenericOutput,
                                     HarnessResult, PhaseParams,
-                                    PromptEngineering, SSSFConfig)
+                                    PromptEngineering, SSSFConfig,
+                                    UsageBreakdown)
 
 
 class ScriptedAdapter:
@@ -75,6 +76,36 @@ def test_retry_continues_with_the_real_returned_session_id(sssf_repo, prompt_fil
     assert stub.seen_session_ids[1] == real_id             # adopted before the retry
     assert run.agent_map["tester"]["session_id"] == real_id
     assert run.agent_map["tester"]["coding_agent"] == "pi"
+
+
+def test_credits_reach_the_trace_without_becoming_dollars(
+        sssf_repo, prompt_files, monkeypatch):
+    """A harness that bills credits instead of tokens (Kiro CLI) must still
+    show a cost in the trace. The credits accumulate on the session and stay
+    out of total_cost, whose unit is dollars — reporting them there would make
+    a 0.44-credit run look like a 44-cent one."""
+    import sqlite3
+
+    cfg = _cfg(prompt_files)
+    usage = UsageBreakdown(credits=0.22)
+    stub = ScriptedAdapter([
+        (None, HarnessResult(text='{"status": "success"}', returncode=0,
+                             session_id="real-1", usage=usage)),
+    ])
+    monkeypatch.setitem(harnesses.ADAPTERS, "pi", stub)
+
+    run = session.ensure(cfg, adw_id="credits1")
+    with run.phase(PhaseParams(name="t", kind="agent", owner="tester",
+                               description="exercise credit accounting")) as ph:
+        ph.call(AgentCall(output_type=GenericOutput, prompt="hi", gates=[]))
+
+    assert run.credits == pytest.approx(0.22)
+    assert run.cost == 0.0
+    conn = sqlite3.connect(cfg.observability.db)
+    row = conn.execute("select total_credits, total_cost, total_tokens from"
+                       " sessions where adw_id='credits1'").fetchone()
+    conn.close()
+    assert row == (pytest.approx(0.22), 0.0, 0)
 
 
 def test_session_reused_only_when_coding_agent_and_model_both_match(sssf_repo, prompt_files, monkeypatch):

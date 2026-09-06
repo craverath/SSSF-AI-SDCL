@@ -1,3 +1,4 @@
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -6,27 +7,27 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = REPO_ROOT / "install.py"
-GRILL_SKILL = REPO_ROOT / ".claude/skills/sssf-grill-me/SKILL.md"
+
+
+def load_installer():
+    """The installer as a module. It is a script, not a package, and guards
+    main() behind __name__, so importing it only defines its constants."""
+    path = REPO_ROOT / ".claude/skills/sssf/scripts/install.py"
+    spec = importlib.util.spec_from_file_location("sssf_installer", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest.mark.parametrize(
-    ("integration", "skill_path", "grill_skill_path"),
+    ("integration", "skill_path"),
     [
-        (
-            "claude",
-            Path(".claude/skills/sssf"),
-            Path(".claude/skills/sssf-grill-me"),
-        ),
-        (
-            "codex",
-            Path(".agents/skills/sssf"),
-            Path(".agents/skills/sssf-grill-me"),
-        ),
+        ("claude", Path(".claude/skills/sssf")),
+        ("codex", Path(".agents/skills/sssf")),
+        ("kiro", Path(".kiro/skills/sssf")),
     ],
 )
-def test_installs_selected_integration(
-    tmp_path, integration, skill_path, grill_skill_path
-):
+def test_installs_selected_integration(tmp_path, integration, skill_path):
     result = subprocess.run(
         [sys.executable, str(INSTALLER), "--integration", integration],
         cwd=tmp_path,
@@ -37,8 +38,12 @@ def test_installs_selected_integration(
 
     assert f"integration: {integration}" in result.stdout
     assert (tmp_path / skill_path / "SKILL.md").is_file()
-    installed_grill_skill = tmp_path / grill_skill_path / "SKILL.md"
-    assert installed_grill_skill.read_text() == GRILL_SKILL.read_text()
+    # Driven off the installer's own tuple: a companion skill that is added
+    # there but not stamped beside the factory would otherwise ship invisible.
+    for companion in load_installer().COMPANION_SKILLS:
+        source = REPO_ROOT / ".claude/skills" / companion / "SKILL.md"
+        installed = tmp_path / skill_path.parent / companion / "SKILL.md"
+        assert installed.read_text() == source.read_text(), companion
     assert not (tmp_path / skill_path / "apps/visualizer/node_modules").exists()
     assert not (tmp_path / skill_path / "apps/visualizer/dist").exists()
     assert (tmp_path / "adws/adw_modules/harnesses.py").is_file()
@@ -46,6 +51,20 @@ def test_installs_selected_integration(
     installed_justfile = (tmp_path / "justfile").read_text()
     assert "sssf *ARGS:" in installed_justfile
     assert "simple-sdlc *ARGS:" not in installed_justfile
+
+
+def test_every_companion_skill_on_disk_is_registered_for_install():
+    """The installer stamps `sssf` plus a fixed tuple, so a companion skill
+    added to the source tree and not to that tuple exists in the repo and ships
+    to nobody. Driving the install assertions off COMPANION_SKILLS cannot catch
+    that direction — this compares the tuple against what is actually there."""
+    installer = load_installer()
+    on_disk = {
+        path.parent.name
+        for path in (REPO_ROOT / ".claude/skills").glob("*/SKILL.md")
+        if path.parent.name != "sssf"
+    }
+    assert on_disk == set(installer.COMPANION_SKILLS)
 
 
 def test_none_installs_factory_without_host_integration(tmp_path):
@@ -59,8 +78,21 @@ def test_none_installs_factory_without_host_integration(tmp_path):
 
     assert "integration: none" in result.stdout
     assert (tmp_path / "adws/adw_modules/harnesses.py").is_file()
-    assert not (tmp_path / ".claude").exists()
-    assert not (tmp_path / ".agents").exists()
+    for host_dir in (".claude", ".agents", ".kiro"):
+        assert not (tmp_path / host_dir).exists()
+
+
+def test_visualizer_recipe_probes_every_integration():
+    """The obs recipe is committed, but which host stamped a given clone is
+    not, so it probes for each. The probe chain lives in two places — the
+    template a fresh install stamps, and the constant an existing justfile is
+    migrated to — and a new INTEGRATION_PATHS entry missing from either yields
+    a justfile that cannot find the app."""
+    installer = load_installer()
+    template = (REPO_ROOT / ".claude/skills/sssf/templates/justfile").read_text()
+    for path in installer.INTEGRATION_PATHS.values():
+        assert f'skill_dir="{path}"' in installer.PORTABLE_VISUALIZER_COMMAND
+        assert f'skill_dir="{path}"' in template
 
 
 def test_migrates_legacy_visualizer_path_without_replacing_justfile(tmp_path):
