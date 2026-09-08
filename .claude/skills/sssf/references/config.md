@@ -155,25 +155,30 @@ The sibling `contextUsage.usagePercentage` is deliberately **not** used to deriv
 
 The v3 stream is chattier than v2's, and mixes plain log lines into stdout; the adapter skips anything that is not JSON and forwards only completed tool calls. KAS's own startup logging goes to stderr, which is drained on a background thread like every other adapter's.
 
-A mixed roster is the default: Claude Code Sonnet handles planner, builder, scout, and documenter; Codex GPT-5.6 Terra handles review. Because Codex has no tool-allowlist flag, its agent must set `tools: null` instead of inheriting the Claude Code list:
+A mixed roster is the default: Kiro CLI takes the three judgement-heavy roles — Claude Opus 5 to plan, Claude Sonnet 5 to build, GPT-5.6 Sol to review — and Antigravity Gemini 3.8 Flash Medium takes scout and documenter. Neither harness can honor a tool allowlist, so `defaults.tools` is `null` roster-wide rather than a list every agent has to override:
 
 ```yaml
+defaults:
+  coding_agent: kiro_cli
+  model: claude-sonnet-5           # builder inherits this
+  tools: null                      # neither kiro_cli nor antigravity honors a list
+
 agents:
   - name: planner
+    model: claude-opus-5
     thinking: high
     prompt_engineering:
       system: adws/adw_data/prompt_engineering/planner/system.md
       user: adws/adw_data/prompt_engineering/planner/user.md
 
-  - name: reviewer
-    coding_agent: codex
-    model: gpt-5.6-terra
-    thinking: high
-    tools: null
+  - name: scout
+    coding_agent: antigravity
+    model: gemini-3.8-flash-medium
+    thinking: medium               # must equal the tier baked into the slug
     writes: []
     prompt_engineering:
-      system: adws/adw_data/prompt_engineering/reviewer/system.md
-      user: adws/adw_data/prompt_engineering/reviewer/user.md
+      system: adws/adw_data/prompt_engineering/scout/system.md
+      user: adws/adw_data/prompt_engineering/scout/user.md
 ```
 
 Both CLIs must be installed and logged in before running the starter roster. SSSF reads no credentials for either.

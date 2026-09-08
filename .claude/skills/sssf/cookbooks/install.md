@@ -27,7 +27,7 @@ Run from the **target repo root** — the cwd is where everything lands. The rep
 
 The two `*_engineering` dirs mirror the two config keys of the same name: `prompt_engineering` is what an agent is told, `harness_engineering` is what its harness can do. Both are yours the moment they are stamped. Edit them in `adws/adw_data/`, never back inside the skill.
 
-`harness_engineering/` ships with `subagents.ts` — the pi extension backing `subagent_create` / `_continue` / `_list` / `_remove`, wired to the planner and scout in the starter roster.
+`harness_engineering/` ships with `subagents.ts` — the pi extension backing `subagent_create` / `_continue` / `_list` / `_remove`. No starter agent uses it: `defaults.harness_engineering` is `[]`, and `agents.validate()` rejects the key on any non-pi harness, which the whole starter roster is. It is there for when you put an agent on `coding_agent: pi`.
 
 ## Idempotency
 
@@ -35,8 +35,8 @@ Re-running is safe. `install.py` preserves existing files — your config, promp
 
 ## Post-install checklist
 
-1. **CLIs** — the starter roster needs authenticated `claude` and `codex` commands on PATH. Set `CLAUDE_PATH` or `CODEX_PATH` in `.env` only when the executable is elsewhere.
-2. **Models** — confirm Claude Code accepts `sonnet` and Codex accepts `gpt-5.6-terra` for the logged-in accounts.
+1. **CLIs** — the starter roster needs authenticated `kiro-cli` (planner, builder, reviewer) and `agy` (scout, documenter) commands on PATH. Set `KIRO_PATH` or `AGY_PATH` in `.env` only when the executable is elsewhere.
+2. **Models** — confirm `kiro-cli chat --list-models --format json` offers `claude-opus-5`, `claude-sonnet-5`, and `gpt-5.6-sol`, and that `agy models` offers `gemini-3.8-flash-medium`, for the logged-in accounts. Both are checked by `agents.validate()` before anything spawns.
 3. **Env** — `.env` is optional for the starter roster. Copy `.env.sample` only when adding path overrides or Pi provider keys.
 4. **Gitignore** — `install.py` appends `adws/adw_data/sessions/`, `adws/adw_data/sssf.db*`, `.env`, `__pycache__/`, `*.pyc`, and `node_modules/` for you; confirm they landed. They are runtime, bytecode, dependencies, or secrets, and must never be committed. `node_modules/` is not cosmetic: `permissions.snapshot()` lists untracked files, so an unignored dependency tree that appears mid-run is attributed to the agent and rolled back file by file. The stamped visualizer carries its own `.gitignore` for the same reason.
 5. **Git repo** — ADWs that end in a commit phase call `git_helper.commit_all`, which raises if the cwd is not a git repository. Run `git init` and make a first commit before using `adw_plan_build.py`, `adw_plan_build_test.py`, or `adw_simple_sdlc.py`. `adw_document.py` needs one too: it measures the change with `git diff` against a base ref (`main` by default, `--base` to override).

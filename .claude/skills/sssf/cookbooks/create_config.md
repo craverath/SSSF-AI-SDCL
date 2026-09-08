@@ -48,7 +48,7 @@ agents:
       - bash
 ```
 
-Every agent entry merges over `defaults`, so an entry only states what differs. The starter reviewer overrides the defaults with `coding_agent: codex`, `model: gpt-5.6-terra`, and `tools: null` because Codex has no tool-allowlist flag.
+Every agent entry merges over `defaults`, so an entry only states what differs. The starter roster keeps `defaults.coding_agent: kiro_cli` for planner, builder, and reviewer — each naming only its own `model` — while scout and documenter override with `coding_agent: antigravity`. Neither harness honors a tool allowlist, so `defaults.tools` is `null` once rather than a list every entry has to replace.
 
 ## After generating
 

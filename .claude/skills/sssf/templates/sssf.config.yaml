@@ -1,21 +1,22 @@
 # sssf.config.yaml — the factory's agent roster. One agent, one prompt, one purpose.
-# The starter roster runs Claude Code Sonnet, with Codex GPT-5.6 Terra for
-# review. Each agent may still select pi | claude_code | codex | kiro_cli |
-# antigravity independently — see references/config.md#harnesses.
+# The starter roster runs Kiro CLI for the three judgement-heavy roles — Claude
+# Opus 5 to plan, Claude Sonnet 5 to build, GPT-5.6 Sol to review — and
+# Antigravity Gemini 3.8 Flash for recon and documentation. Each agent may still
+# select pi | claude_code | codex | kiro_cli | antigravity independently — see
+# references/config.md#harnesses.
 defaults:
-  coding_agent: claude_code
-  model: sonnet
+  coding_agent: kiro_cli
+  model: claude-sonnet-5           # builder inherits this; every other agent names its own
   thinking: medium                 # off | minimal | low | medium | high | xhigh | max
-  harness_engineering: []          # Pi-only extensions; empty for Claude Code and Codex
-  # Roster-wide allowlist; any agent may override with its own list.
-  # Keep this list to names that Claude Code's adapter can map directly.
-  tools:
-    - read                         # read file contents
-    - bash                         # execute bash commands
-    - edit                         # find/replace edits
-    - write                        # create/overwrite files
-    - grep                         # search file contents
-    - find                         # find files by glob
+  harness_engineering: []          # Pi-only extensions; empty for Kiro CLI and Antigravity
+  # null, not a list, because the whole roster runs on kiro_cli and antigravity
+  # and NEITHER can honor a tool allowlist. Kiro's `--trust-tools` takes the v3
+  # engine's own tool ids, and a name it does not recognize DENIES the tool
+  # instead of allowing it; Antigravity's headless mode has no allowlist flag at
+  # all. `agents.validate()` rejects any non-null list on those harnesses rather
+  # than let the roster describe a scope nothing enforces. What each agent may
+  # change is `writes:` below, checked against the repo after every turn.
+  tools: null
   # Off-limits to every agent that does not name them in its own `writes`.
   # `tools` alone cannot protect these: bash runs `git checkout`, and write
   # reaches any path. An agent must not be able to edit the machinery that
@@ -37,6 +38,7 @@ observability:
 
 agents:
   - name: planner
+    model: claude-opus-5           # its errors propagate into every later phase
     thinking: high
     color: "#a78bfa"                 # optional hex — the agent's lane color in the visualizer
     purpose: Turn a request into a plan the builder can implement without asking questions.
@@ -45,12 +47,6 @@ agents:
       user: adws/adw_data/prompt_engineering/planner/user.md
     writes:                        # the plan is the only thing it may leave in the repo
       - specs/
-    tools:                         # full recon + write for plan.md; no edit — the planner never touches repo files
-      - read
-      - grep
-      - find
-      - bash
-      - write
 
   - name: builder
     color: "#22d3ee"
@@ -60,15 +56,11 @@ agents:
       user: adws/adw_data/prompt_engineering/builder/user.md
     # No `writes` key: unrestricted, and the only agent that is. It still cannot
     # touch defaults.protected_files — the builder does not get to edit its own grader.
-    tools:                         # the only agent that mutates the repo — everything on
-      - read
-      - grep
-      - find
-      - bash
-      - edit
-      - write
 
   - name: scout
+    coding_agent: antigravity
+    model: gemini-3.8-flash-medium # recon is high-volume and off the critical path
+    thinking: medium               # MUST equal the tier baked into the slug
     color: "#fbbf24"
     purpose: Find and report where things live; change nothing.
     prompt_engineering:
@@ -76,20 +68,13 @@ agents:
       user: adws/adw_data/prompt_engineering/scout/user.md
     writes: []                     # read-only, and now actually read-only: its findings
                                    # go to context_handoff/, which is runtime, not the repo
-    tools:                         # search-heavy recon; write only so scout_findings.md lands without a bash heredoc
-      - read
-      - grep
-      - find
-      - bash
-      - write
 
   # No tester agent: running the suite is a known command, so it is a kind="code"
   # phase over adw_modules/quality.py. See SKILL.md hard rule 8.
 
   - name: reviewer
-    coding_agent: codex
-    model: gpt-5.6-terra
-    thinking: high
+    model: gpt-5.6-sol             # a different model family than the builder — a model
+    thinking: high                 # rarely catches the mistake it would have made itself
     color: "#fb7185"
     purpose: Confirm that what was built is what was asked for; change nothing.
     prompt_engineering:
@@ -97,9 +82,11 @@ agents:
       user: adws/adw_data/prompt_engineering/reviewer/user.md
     writes: []                     # a reviewer that cannot fix cannot quietly fix — the
                                    # claim the tool list only implied, now enforced
-    tools: null                    # Codex CLI has no tool allowlist flag
 
   - name: documenter
+    coding_agent: antigravity
+    model: gemini-3.8-flash-medium
+    thinking: medium               # MUST equal the tier baked into the slug
     color: "#e879f9"
     purpose: Write up the change that was just made, from the diff; document only.
     prompt_engineering:
@@ -110,10 +97,3 @@ agents:
       - docs/                      # Markdown anywhere, because docs live next to the
       - "**/*.md"                  # code they describe as often as in a docs folder.
       - "*.md"
-    tools:                         # reads the diff and the code; writes/edits documentation only
-      - read
-      - grep
-      - find
-      - bash
-      - write
-      - edit

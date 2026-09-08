@@ -61,8 +61,8 @@ uv run /path/to/super-simple-software-factory/install.py --integration codex
 # or: --integration kiro
 # or: --integration none
 
-claude --version                                 # starter agents
-codex --version                                  # starter reviewer
+kiro-cli --version                               # planner, builder, reviewer
+agy --version                                    # scout, documenter
 git init && git add -A && git commit -m "stamp sssf"   # commit the factory BEFORE the first chain
 
 # smoke test: two cheap read-only runs, end to end
@@ -93,7 +93,9 @@ Green on the smoke test means the whole path works: config validated, a harness 
 
 ### Credentials
 
-The starter roster uses Claude Code Sonnet for planner, builder, scout, and documenter, plus Codex GPT-5.6 Terra for review. Both CLIs must already be logged in; SSSF does not read their credentials.
+The starter roster runs Kiro CLI for the three judgement-heavy roles — Claude Opus 5 to plan, Claude Sonnet 5 to build, GPT-5.6 Sol to review — and Antigravity Gemini 3.8 Flash Medium for scout and documenter. Both CLIs must already be logged in; SSSF does not read their credentials.
+
+Neither harness honors a tool allowlist, so `defaults.tools` ships as `null`. That is not a shortcut: Kiro's `--trust-tools` takes the v3 engine's own tool ids and DENIES a name it does not recognize, and Antigravity's headless mode has no allowlist flag at all. `writes:` is the boundary either way, checked against the repo after every turn.
 
 API keys in `.env` are only needed when you configure a Pi agent backed by an API provider.
 
@@ -145,9 +147,10 @@ There is no DSL here. No framework to learn. It is Python, YAML, agents, and a s
 
 ```yaml
 defaults:
-  coding_agent: claude_code        # pi | claude_code | codex | kiro_cli | antigravity
-  model: sonnet
+  coding_agent: kiro_cli           # pi | claude_code | codex | kiro_cli | antigravity
+  model: claude-sonnet-5
   thinking: medium                 # off | minimal | low | medium | high | xhigh | max
+  tools: null                      # kiro_cli and antigravity honor no allowlist
   protected_files:                 # no agent may edit the machinery that grades it
     - adws/adw_modules/
     - adws/adw_sssf_config/
@@ -156,7 +159,8 @@ defaults:
 
 agents:
   - name: planner
-    thinking: high                 # per-agent overrides win over defaults
+    model: claude-opus-5           # per-agent overrides win over defaults
+    thinking: high
     color: "#a78bfa"               # this agent's lane swatch in the trace
     purpose: Turn a request into a plan the builder can implement without asking questions.
     prompt_engineering:
@@ -165,12 +169,11 @@ agents:
     writes:                        # the plan is all it may leave in the repo
       - specs/
 
-  - name: reviewer
-    coding_agent: codex
-    model: gpt-5.6-terra
-    thinking: high
-    tools: null
-    writes: []
+  - name: scout
+    coding_agent: antigravity      # a different harness per agent, not per roster
+    model: gemini-3.8-flash-medium # the effort tier is part of Antigravity's slug
+    thinking: medium               # and `thinking` must match it
+    writes: []                     # read-only with respect to the repo
 ```
 
 Five starter agents ship in the box: `planner`, `builder`, `scout` (read-only recon), `reviewer`, and `documenter`. There is no tester, because running a suite is a known command and therefore code.

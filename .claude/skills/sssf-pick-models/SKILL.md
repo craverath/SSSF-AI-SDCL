@@ -99,10 +99,12 @@ providers fails at resolution.
 ## Step 3 — write it
 
 One `coding_agent` + `model` pair per agent, plus the keys that harness forces.
-**The forced keys are the whole reason to use this skill**: `defaults.tools` is a
-list in the starter roster and every agent inherits it, so switching an agent to
-codex, kiro_cli, or antigravity without also setting `tools: null` fails
-`agents.validate()` before anything spawns.
+**The forced keys are the whole reason to use this skill**: an agent on codex,
+kiro_cli, or antigravity must have `tools: null`, and it inherits whatever
+`defaults.tools` holds. The starter roster ships `defaults.tools: null` because
+its whole roster is kiro_cli and antigravity — but a roster that has been edited
+back to a list, or one moving a pi/claude_code agent onto those harnesses, fails
+`agents.validate()` before anything spawns unless the list is replaced.
 
 ```yaml
   - name: builder
@@ -137,12 +139,12 @@ Rules per harness, all enforced by `agents.validate()`:
 When the **whole** roster moves to codex/kiro_cli/antigravity, set
 `defaults.tools: null` once instead of repeating it on every agent.
 
-**`tools: null` must REPLACE the agent's existing list, not join it.** In the
-starter roster, planner, builder, scout, and documenter each carry their own
-`tools:` list. Adding a second `tools:` key to the same entry is silently
-ambiguous and parser-dependent; with the loader used here, the last duplicate
-key wins. Do not rely on ordering to override the old value. Delete the list
-and its items, then write `tools: null` in its place.
+**`tools: null` must REPLACE the agent's existing list, not join it.** The starter
+roster already ships `null` roster-wide, but a roster that has been retuned may
+carry per-agent `tools:` lists. Adding a second `tools:` key to the same entry is
+silently ambiguous and parser-dependent; with the loader used here, the last
+duplicate key wins. Do not rely on ordering to override the old value. Delete the
+list and its items, then write `tools: null` in its place.
 
 Two consequences worth stating out loud before saving:
 

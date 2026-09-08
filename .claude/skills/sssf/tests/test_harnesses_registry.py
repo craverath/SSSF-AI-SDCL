@@ -42,16 +42,25 @@ def test_resolve_unknown_coding_agent_fails_objectively():
         harnesses.resolve("some_other_cli")
 
 
-def test_starter_roster_uses_claude_sonnet_and_codex_terra():
+def test_starter_roster_uses_kiro_for_judgement_and_antigravity_for_the_rest():
+    """The shipped roster must be internally consistent, not merely parseable.
+
+    Each pair is checked through the adapter's own validate(), which is where
+    the harness-forced keys live: kiro_cli and antigravity both reject a
+    non-null `tools`, and antigravity additionally rejects a `thinking` that
+    contradicts the effort tier baked into its model slug. A roster edit that
+    changes a model without its matching tier, or that reintroduces a
+    `defaults.tools` list, fails here rather than at the first spawn.
+    """
     config_path = Path(__file__).resolve().parents[1] / "templates/sssf.config.yaml"
     config = agents.load_config(str(config_path))
 
     expected = {
-        "planner": ("claude_code", "sonnet"),
-        "builder": ("claude_code", "sonnet"),
-        "scout": ("claude_code", "sonnet"),
-        "reviewer": ("codex", "gpt-5.6-terra"),
-        "documenter": ("claude_code", "sonnet"),
+        "planner": ("kiro_cli", "claude-opus-5"),
+        "builder": ("kiro_cli", "claude-sonnet-5"),
+        "scout": ("antigravity", "gemini-3.8-flash-medium"),
+        "reviewer": ("kiro_cli", "gpt-5.6-sol"),
+        "documenter": ("antigravity", "gemini-3.8-flash-medium"),
     }
     for name, (coding_agent, model) in expected.items():
         agent = agents.resolve(config, name)
