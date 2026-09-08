@@ -21,10 +21,10 @@ defaults:
   # reaches any path. An agent must not be able to edit the machinery that
   # decides whether its own work passed. Enforced in adw_modules/permissions.py.
   #
-  # `writes:` per agent says what it may change IN THE REPO. It never restricts
-  # the session runtime under data_dir — context_handoff/, envelopes, prompts,
-  # raw output. Every agent can always write its own report; `writes: []` means
-  # read-only with respect to the repo, not mute.
+  # `writes:` per agent says what it may change IN THE REPO. Only this run's
+  # {data_dir}/sessions/{adw_id}/ runtime is exempt, including context_handoff/.
+  # Active system/user prompts are always protected; broad globs do not unlock
+  # them. `writes: []` means read-only with respect to the repo, not mute.
   protected_files:
     - adws/adw_modules/
     - adws/adw_sssf_config/

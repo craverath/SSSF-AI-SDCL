@@ -49,6 +49,23 @@ def resolve(cfg: SSSFConfig, name: str) -> AgentConfig:
                      f"available: {[a.name for a in cfg.agents]}")
 
 
+def _prompt_symlink_problems(agent: AgentConfig, repo_root: Path) -> list[str]:
+    problems = []
+    for label, ref in (("system", agent.prompt_engineering.system),
+                       ("user", agent.prompt_engineering.user)):
+        component = permissions.prompt_symlink_component(repo_root, ref)
+        if component is not None:
+            problems.append(
+                f"agent {agent.name!r}: {label} prompt must use a direct path; "
+                f"symlink component: {component}")
+    return problems
+
+
+def _roster_prompt_symlink_problems(cfg: SSSFConfig, repo_root: Path) -> list[str]:
+    return [problem for configured_agent in cfg.agents
+            for problem in _prompt_symlink_problems(configured_agent, repo_root)]
+
+
 def validate(cfg: SSSFConfig, required: list[str]) -> None:
     """Fail fast: every required name must resolve to a usable agent.
 
@@ -56,7 +73,10 @@ def validate(cfg: SSSFConfig, required: list[str]) -> None:
     ...) live in each adapter's own `validate()` — this function never asks
     what coding_agent an agent uses beyond looking its adapter up.
     """
-    problems = []
+    # Every configured prompt is an active protected path, even when this ADW
+    # does not require its agent. Scan only path safety roster-wide; model and
+    # existence validation below remains scoped to `required`.
+    problems = _roster_prompt_symlink_problems(cfg, Path.cwd())
     for name in required:
         try:
             agent = resolve(cfg, name)
@@ -82,6 +102,9 @@ def validate(cfg: SSSFConfig, required: list[str]) -> None:
 def execute(run, phase: Phase, call: AgentCall) -> EnvelopeBase:
     """One agent call: render prompts -> pi run -> typed parse -> gates -> envelope."""
     agent = resolve(run.cfg, phase.params.owner)
+    prompt_problems = _roster_prompt_symlink_problems(run.cfg, Path(run.repo_root))
+    if prompt_problems:
+        raise SystemExit("config validation failed:\n- " + "\n- ".join(prompt_problems))
     adapter = harnesses.resolve(agent.coding_agent)   # resolved once; the rest of this
                                                        # function only calls the common contract
     agent_dir = run.session_dir / agent.name
@@ -115,6 +138,23 @@ def execute(run, phase: Phase, call: AgentCall) -> EnvelopeBase:
     latest: HarnessResult | None = None
     spent = UsageBreakdown()
 
+    # This immutable phase baseline is only for the final paths_touched event.
+    # Enforcement gets a fresh baseline immediately before each harness turn,
+    # so a breach is rolled back before parsing or any retry can run.
+    phase_before = permissions.snapshot(run)
+
+    def enforce_turn(before) -> None:
+        try:
+            permissions.enforce(run, phase, agent, before)
+        except permissions.PermissionBreach as breach:
+            run.tracer.event(EventRecord(
+                adw_id=run.adw_id, phase_id=phase.phase_id,
+                type="error", name="permission_breach",
+                payload={"agent": agent.name, "error": str(breach),
+                         "writes": agent.writes,
+                         "protected_files": run.cfg.defaults.protected_files}))
+            raise
+
     def send(prompt_text: str) -> HarnessResult:
         nonlocal latest, session_id
         request = HarnessRequest(
@@ -135,13 +175,22 @@ def execute(run, phase: Phase, call: AgentCall) -> EnvelopeBase:
             cwd=str(run.repo_root),
             read_only=(agent.writes == []),
         )
-        result = adapter.run(
-            request,
-            on_event=_event_forwarder(run, phase, agent.name),
-            on_spawn=lambda pid: run.tracer.process_start(
-                run.adw_id, "agent", agent.name, pid,
-                f"{agent.coding_agent} {agent.name} {agent.model}"),
-            on_exit=lambda pid: run.tracer.process_end(run.adw_id, pid))
+        turn_before = permissions.snapshot(run)
+        try:
+            result = adapter.run(
+                request,
+                on_event=_event_forwarder(run, phase, agent.name),
+                on_spawn=lambda pid: run.tracer.process_start(
+                    run.adw_id, "agent", agent.name, pid,
+                    f"{agent.coding_agent} {agent.name} {agent.model}"),
+                on_exit=lambda pid: run.tracer.process_end(run.adw_id, pid))
+        except BaseException as adapter_error:
+            try:
+                enforce_turn(turn_before)
+            except permissions.PermissionBreach as breach:
+                raise breach from adapter_error
+            raise
+        enforce_turn(turn_before)
         # Adopt the REAL id the adapter used or was assigned — never the
         # placeholder agents.py offered — so retries within this phase, and
         # the entry saved to agent_map.json, continue the actual session.
@@ -152,11 +201,6 @@ def execute(run, phase: Phase, call: AgentCall) -> EnvelopeBase:
         spent.merge(result.usage)
         latest = result
         return result
-
-    # What the tree looked like before this agent got its hands on it. Every
-    # send in this phase — first prompt, JSON retries, gate corrections — is
-    # measured against this one baseline.
-    tree_before = permissions.snapshot(run)
 
     result = send(user_text)
     envelope, attempt = _parse_with_retries(run, phase, call, result, send)
@@ -189,18 +233,7 @@ def execute(run, phase: Phase, call: AgentCall) -> EnvelopeBase:
         result = send(correction)
         envelope, attempt = _parse_with_retries(run, phase, call, result, send)
 
-    # Permission is checked after every send is done, and before the envelope is
-    # accepted: an agent does not get to report success on a phase in which it
-    # wrote somewhere it was not allowed to.
-    try:
-        touched = permissions.enforce(run, phase, agent, tree_before)
-    except permissions.PermissionBreach as breach:
-        run.tracer.event(EventRecord(adw_id=run.adw_id, phase_id=phase.phase_id,
-                                     type="error", name="permission_breach",
-                                     payload={"agent": agent.name, "error": str(breach),
-                                              "writes": agent.writes,
-                                              "protected_files": run.cfg.defaults.protected_files}))
-        raise
+    touched = permissions.changed_paths(phase_before, permissions.snapshot(run))
     if touched:
         run.tracer.event(EventRecord(adw_id=run.adw_id, phase_id=phase.phase_id,
                                      type="log", name="paths_touched",

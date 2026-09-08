@@ -1,7 +1,7 @@
 """Shared fixtures for the multi-harness adapter tests.
 
 Run with:
-    uv run --with pydantic --with pyyaml --with python-dotenv --with pytest \\
+    uv run --with pydantic --with pyyaml --with python-dotenv --with rich --with pytest \\
         pytest <skill-dir>/tests
 
 No test here calls a real model. Every adapter is exercised against
@@ -22,6 +22,7 @@ import pytest
 TESTS_DIR = Path(__file__).resolve().parent
 ADWS_DIR = TESTS_DIR.parent / "templates" / "adws"
 FAKE_CLI = TESTS_DIR / "fixtures" / "fake_cli.py"
+REPO_ROOT = TESTS_DIR.parents[3]
 
 if str(ADWS_DIR) not in sys.path:
     sys.path.insert(0, str(ADWS_DIR))
@@ -110,15 +111,23 @@ def call_with_timeout(fn: Callable[[], Any], timeout: float = 10.0) -> Any:
 def sssf_repo(tmp_path, monkeypatch):
     """A throwaway git repo, checked out as cwd — what Run()/permissions.py expect.
 
-    No commit is made (and no identity configured for one): permissions.py only
-    needs `git` to recognize the directory as a repo. `git diff HEAD` on an
-    unborn HEAD degrades to empty output rather than raising (permissions._git
-    swallows the non-zero exit), and `git ls-files --others` works with zero
-    commits — both snapshot() building blocks are fine against a bare `git init`.
+    No commit is made (and no identity configured for one). Runtime is ignored
+    just as it is in an installed project, so framework-owned SQLite writes are
+    not attributed to the adapter under test.
     """
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / ".git/info/exclude").write_text("/adws/adw_data/\n")
+    monkeypatch.chdir(repo)
+    return repo
+
+
+@pytest.fixture
+def tracked_repo(tmp_path, monkeypatch):
+    """Clone the already-committed fixture repository without staging in tests."""
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "clone", "-q", str(REPO_ROOT), str(repo)], check=True)
     monkeypatch.chdir(repo)
     return repo
 

@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 import pytest
-from adw_modules import agents, harnesses, session
+from adw_modules import agents, harnesses, permissions, session
 from adw_modules.data_types import (AgentCall, AgentConfig, GenericOutput,
                                     HarnessResult, PhaseParams,
                                     PromptEngineering, SSSFConfig,
@@ -47,6 +47,35 @@ class ScriptedAdapter:
         return result
 
 
+class ActingAdapter:
+    """Runs one in-process action per turn, allowing filesystem regressions."""
+
+    def __init__(self, actions):
+        self.actions = list(actions)
+        self.seen_requests = []
+
+    def validate(self, agent):
+        return []
+
+    def run(self, request, on_event=None, on_spawn=None, on_exit=None):
+        self.seen_requests.append(request)
+        return self.actions.pop(0)()
+
+
+class EventingAdapter:
+    def __init__(self):
+        self.seen_requests = []
+
+    def validate(self, agent):
+        return []
+
+    def run(self, request, on_event=None, on_spawn=None, on_exit=None):
+        self.seen_requests.append(request)
+        on_event({"tool": "read", "ok": True})
+        return HarnessResult(text='{"status": "success"}', returncode=0,
+                             session_id="event-session")
+
+
 def _cfg(prompt_files, model="m1", coding_agent="pi"):
     system, user = prompt_files
     return SSSFConfig(agents=[AgentConfig(
@@ -76,6 +105,107 @@ def test_retry_continues_with_the_real_returned_session_id(sssf_repo, prompt_fil
     assert stub.seen_session_ids[1] == real_id             # adopted before the retry
     assert run.agent_map["tester"]["session_id"] == real_id
     assert run.agent_map["tester"]["coding_agent"] == "pi"
+
+
+def test_permission_breach_preempts_invalid_json_retry(
+        sssf_repo, prompt_files, monkeypatch):
+    cfg = _cfg(prompt_files)
+    system_prompt = prompt_files[0]
+    original = system_prompt.read_text()
+
+    def breach_then_invalid_json():
+        system_prompt.write_text("tampered")
+        return HarnessResult(text="not json", returncode=0, session_id="real")
+
+    stub = ActingAdapter([breach_then_invalid_json])
+    monkeypatch.setitem(harnesses.ADAPTERS, "pi", stub)
+    run = session.ensure(cfg, adw_id="breach-before-parse")
+
+    with pytest.raises(permissions.PermissionBreach):
+        with run.phase(PhaseParams(name="t", kind="agent", owner="tester",
+                                   description="breach must preempt parsing")) as ph:
+            ph.call(AgentCall(output_type=GenericOutput, prompt="hi", gates=[]))
+
+    assert len(stub.seen_requests) == 1
+    assert system_prompt.read_text() == original
+    assert run.tracer.conn.execute(
+        "SELECT count(*) FROM events WHERE name='permission_breach'"
+    ).fetchone() == (1,)
+
+
+def test_adapter_exception_still_enforces_and_is_chained_from_breach(
+        sssf_repo, prompt_files, monkeypatch):
+    cfg = _cfg(prompt_files)
+    cfg.agents[0].writes = []
+    forbidden = sssf_repo / "forbidden.txt"
+
+    def breach_then_raise():
+        forbidden.write_text("tampered")
+        raise RuntimeError("adapter failed")
+
+    stub = ActingAdapter([breach_then_raise])
+    monkeypatch.setitem(harnesses.ADAPTERS, "pi", stub)
+    run = session.ensure(cfg, adw_id="breach-with-adapter-error")
+
+    with pytest.raises(permissions.PermissionBreach) as caught:
+        with run.phase(PhaseParams(name="t", kind="agent", owner="tester",
+                                   description="enforce adapter exceptions")) as ph:
+            ph.call(AgentCall(output_type=GenericOutput, prompt="hi", gates=[]))
+
+    assert isinstance(caught.value.__cause__, RuntimeError)
+    assert str(caught.value.__cause__) == "adapter failed"
+    assert not forbidden.exists()
+
+
+def test_other_roster_agent_prompt_symlink_is_rejected_before_render_or_spawn(
+        sssf_repo, prompt_files, monkeypatch):
+    active = sssf_repo / "review-effective.md"
+    active.write_text("effective instructions")
+    reviewer_system = sssf_repo / "review-system.md"
+    reviewer_system.symlink_to(active)
+    reviewer_user = sssf_repo / "review-user.md"
+    reviewer_user.write_text("review")
+    cfg = _cfg(prompt_files)
+    cfg.agents.append(AgentConfig(
+        name="reviewer",
+        prompt_engineering=PromptEngineering(
+            system=str(reviewer_system), user=str(reviewer_user)),
+    ))
+    stub = ActingAdapter([])
+    monkeypatch.setitem(harnesses.ADAPTERS, "pi", stub)
+
+    with pytest.raises(SystemExit, match="reviewer.*prompt must use a direct path"):
+        agents.validate(cfg, ["tester"])
+
+    run = session.ensure(cfg, adw_id="prompt-symlink")
+
+    with pytest.raises(SystemExit, match="reviewer.*prompt must use a direct path"):
+        with run.phase(PhaseParams(name="t", kind="agent", owner="tester",
+                                   description="reject any indirect roster prompt")) as ph:
+            ph.call(AgentCall(output_type=GenericOutput, prompt="hi", gates=[]))
+
+    assert stub.seen_requests == []
+
+
+def test_custom_observability_database_is_not_attributed_to_read_only_agent(
+        sssf_repo, prompt_files, monkeypatch):
+    cfg = _cfg(prompt_files)
+    cfg.agents[0].writes = []
+    cfg.defaults.data_dir = "custom_runtime"
+    cfg.observability.db = "custom_runtime/trace.db"
+    stub = EventingAdapter()
+    monkeypatch.setitem(harnesses.ADAPTERS, "pi", stub)
+    run = session.ensure(cfg, adw_id="custom-db")
+
+    with run.phase(PhaseParams(name="t", kind="agent", owner="tester",
+                               description="trace events in a custom runtime")) as ph:
+        envelope = ph.call(AgentCall(output_type=GenericOutput, prompt="hi", gates=[]))
+
+    assert envelope.status == "success"
+    assert run.tracer.conn.execute(
+        "SELECT count(*) FROM events WHERE type='tool_call' AND name='read'"
+    ).fetchone() == (1,)
+    assert not permissions.permitted("custom_runtime/trace.db", cfg.agents[0], run)
 
 
 def test_credits_reach_the_trace_without_becoming_dollars(

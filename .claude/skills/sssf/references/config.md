@@ -72,7 +72,7 @@ agents:
 | `color` | no | Hex swatch (`"#a78bfa"`) for this agent's lane in the visualizer. Travels config → `agent_sessions.color` → `/api/sessions/:adw_id`, and rides the `agent_start` event so a lane is colored while the agent is still running. Unset = the UI's fallback palette. |
 | `coding_agent`, `model`, `thinking`, `color`, `harness_engineering` | no | Override the corresponding `defaults` key. |
 | `tools` | no | Allowlist. **Omitting the key means all tools usable.** A capability list, not a boundary — see `writes`. |
-| `writes` | no | What this agent may modify **in the repo**, enforced after every call. Omitted = unrestricted (still barred from `protected_files`). `[]` = no repo writes at all. A list = only those paths: a trailing `/` is a directory prefix, `*` matches within one path segment, `**` crosses segments, anything else is an exact path. Naming a `protected_files` path here is what unlocks it. **The session runtime under `data_dir` is always writable** — `writes: []` means read-only with respect to the repo, not unable to write its own report. |
+| `writes` | no | What this agent may modify **in the repo**, enforced after every harness turn. Omitted = unrestricted (still barred from `protected_files` and active prompts). `[]` = no repo writes at all. A list = only those paths: a trailing `/` is a directory prefix, `*` matches within one path segment, `**` crosses segments, anything else is an exact path. Naming a `protected_files` path here is what unlocks it. Active system/user prompts require an exact entry; broad globs never unlock them. **Only the current `{data_dir}/sessions/{adw_id}/` runtime is always writable** — `writes: []` means read-only with respect to the repo, not unable to write its own report. |
 
 Output types are deliberately absent: config defines who an agent *is*; the ADW call site defines how it's *used*. One agent serves many calls — same system prompt, different user prompt + output type per call.
 
@@ -270,10 +270,20 @@ file an agent was granted it for. So "this agent changes nothing" is a claim a
 tool list can state but never keep.
 
 `adw_modules/permissions.py` keeps it, the same way every other claim in this
-system is kept — after the fact, against the repo. Before an agent's first
-prompt the working tree's change-set is fingerprinted; after its last send
-(including JSON retries and gate corrections) it is fingerprinted again. Any
-path that appeared, vanished, or changed is attributed to that agent.
+system is kept — after the fact, against the repo. Every harness turn gets its
+own before/after snapshot, checked before parsing, gates, or retries. The
+snapshot records binary contents, file type, and mode for tracked files,
+ordinary untracked files, and all active prompts inside the repo. Any path that
+appeared, vanished, or changed is attributed to that turn.
+
+Prompt paths inside the repository must be direct: `agents.validate()` scans
+the full roster and rejects a system/user prompt whose file or parent directory
+is a symlink, even when that agent is not required by the current ADW. This prevents
+an apparently protected prompt path from redirecting reads to an unprotected
+target. The observability database configured by `observability.db` and its
+SQLite sidecars are excluded precisely because tracer callbacks write them
+during the harness turn; that framework exception does not grant the agent
+write permission to the rest of `data_dir`.
 
 Comparing change-sets rather than watching writes is deliberate: a path that was
 modified before the agent ran and is clean afterwards has been **reverted**, and
@@ -282,11 +292,10 @@ a reversion is a modification. That is what catches `git checkout`.
 A breach is not a gate violation. Gates are for work an agent can be asked to
 redo; a write has already happened, so re-prompting fixes nothing. Instead:
 
-1. every unauthorized change the agent **introduced** is rolled back — tracked
-   files with `git checkout --`, untracked files by deletion;
-2. a path that was **already dirty** before the agent ran is left untouched. The
-   operator had uncommitted work there, and discarding it to tidy up would be
-   the same harm this module exists to prevent;
+1. every unauthorized change is rolled back to its exact pre-turn contents,
+   type, and mode; a newly created file or symlink is removed exactly;
+2. tracked dirty files and pre-existing untracked files are restored to the
+   operator's pre-turn bytes, rather than to `HEAD`;
 3. the phase fails and names every path with what happened to it.
 
 ```yaml
@@ -303,12 +312,15 @@ agents:
     writes: [app_docs/, docs/, "**/*.md", "*.md"]
 ```
 
-**The session runtime under `data_dir` is always writable, for every agent.**
-`context_handoff/` is how agents hand work to each other, and each agent's
-prompts, `raw_output.jsonl`, and `envelope.json` sit beside it. That grant comes
-from `data_dir` rather than from `.gitignore`: the runtime is normally ignored,
-so it never even appears in a snapshot, but an agent's ability to record its own
-work must not depend on a gitignore line someone can delete.
+**Only the current session runtime at `{data_dir}/sessions/{adw_id}/` is always
+writable.** `context_handoff/` is how agents hand work to each other, and each
+agent's saved prompts, `raw_output.jsonl`, and `envelope.json` sit beside it.
+Sibling sessions and the rest of `data_dir` receive no blanket grant. Active
+configured system/user prompts are protected even when ignored; only an exact
+path in that agent's `writes` can unlock one, so the documenter's Markdown
+globs cannot rewrite its instructions. Paths outside the repository are not
+read or restored by this post-execution check and need an external sandbox or
+filesystem policy when they require protection.
 
 Narrow by role, not by reflex. Anything that must produce a `context_handoff/` artifact needs `write`, or it will resort to a `bash` heredoc. Withhold `edit`/`write` only where the restriction *is* the guarantee — a reviewer that cannot edit cannot quietly fix what it was asked to report.
 

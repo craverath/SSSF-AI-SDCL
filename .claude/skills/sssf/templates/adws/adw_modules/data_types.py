@@ -320,8 +320,8 @@ class AgentConfig(BaseModel):
     # (see adw_modules/permissions.py). `tools` cannot express this: `bash` runs
     # anything and `write` reaches any path, so an agent's capability list is a
     # statement of intent that nothing checks.
-    #   None  -> unrestricted, except the roster-wide `protected_files` paths
-    #   []    -> read-only: may modify nothing tracked
+    #   None  -> unrestricted, except `protected_files` and active prompts
+    #   []    -> read-only outside the current session runtime
     #   [...] -> only these. A trailing "/" means a directory prefix; a "*"
     #            makes it a glob; anything else is an exact path.
     writes: Optional[list[str]] = None
@@ -335,6 +335,8 @@ class ConfigDefaults(BaseModel):
     harness_engineering: list[str] = Field(default_factory=list)
     tools: Optional[list[str]] = None    # roster-wide allowlist; None = all tools usable
     # Off-limits to every agent that has not named them in its own `writes`.
+    # Active system/user prompts are protected dynamically as well; unlike
+    # these patterns, only an exact `writes` entry may unlock a prompt.
     # The factory's own code is the default: an agent must not be able to edit
     # the machinery that decides whether its work passed.
     protected_files: list[str] = Field(default_factory=lambda: [
