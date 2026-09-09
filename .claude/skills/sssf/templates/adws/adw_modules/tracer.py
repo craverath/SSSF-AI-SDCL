@@ -89,6 +89,52 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
 );
 """
 
+# Spend per agent phase, in whatever unit the harness actually billed in.
+#
+# A VIEW rather than a table, and recreated on every open, because every number
+# in it is already on the phase's `agent_end` event: making it a table would
+# duplicate the record and leave every run already on disk out of it. Dropping
+# first means an edit here reaches existing dbs, which `CREATE VIEW IF NOT
+# EXISTS` would silently skip.
+#
+# The unit matters more than the number. A mixed roster bills in two currencies
+# at once — Kiro CLI reports credits and no tokens, Antigravity reports tokens
+# and no dollars — so `unit` names what this row's figures mean, and callers
+# must group by it before summing anything.
+USAGE_VIEW = """
+DROP VIEW IF EXISTS phase_usage;
+CREATE VIEW phase_usage AS
+SELECT p.adw_id,
+       p.seq,
+       p.name                                                   AS phase,
+       p.owner                                                  AS agent,
+       a.coding_agent,
+       a.model,
+       p.status,
+       p.attempt,
+       COALESCE(json_extract(e.payload_json, '$.usage.input_tokens'), 0)      AS input_tokens,
+       COALESCE(json_extract(e.payload_json, '$.usage.output_tokens'), 0)     AS output_tokens,
+       COALESCE(json_extract(e.payload_json, '$.usage.cache_read_tokens'), 0) AS cache_read_tokens,
+       COALESCE(json_extract(e.payload_json, '$.usage.reasoning_tokens'), 0)  AS reasoning_tokens,
+       COALESCE(json_extract(e.payload_json, '$.usage.total_tokens'), e.tokens, 0) AS billed_tokens,
+       COALESCE(json_extract(e.payload_json, '$.cost'), 0)                    AS cost_usd,
+       COALESCE(json_extract(e.payload_json, '$.credits'), 0)                 AS credits,
+       json_extract(e.payload_json, '$.context_tokens')          AS context_tokens,
+       json_extract(e.payload_json, '$.context_window')          AS context_window,
+       CAST((julianday(p.ended_at) - julianday(p.started_at)) * 86400.0 AS REAL) AS seconds,
+       CASE
+         WHEN COALESCE(json_extract(e.payload_json, '$.credits'), 0) > 0 THEN 'credit'
+         WHEN COALESCE(json_extract(e.payload_json, '$.cost'), 0) > 0 THEN 'dollar'
+         WHEN COALESCE(json_extract(e.payload_json, '$.usage.total_tokens'), e.tokens, 0) > 0
+           THEN 'token'
+         ELSE 'none'
+       END                                                       AS unit
+  FROM events e
+  JOIN phases p ON p.phase_id = e.phase_id
+  LEFT JOIN agent_sessions a ON a.adw_id = e.adw_id AND a.agent = p.owner
+ WHERE e.type = 'agent_end';
+"""
+
 # Columns added after a schema shipped. CREATE TABLE IF NOT EXISTS never
 # revisits an existing table, so additive changes need an explicit ALTER.
 MIGRATIONS = [("agent_sessions", "color", "TEXT"),
@@ -114,6 +160,8 @@ class Tracer:
         self.conn.execute("PRAGMA busy_timeout=5000;")
         self.conn.executescript(SCHEMA)
         self._migrate()
+        # Last, so every table and migrated column it reads already exists.
+        self.conn.executescript(USAGE_VIEW)
 
     def _migrate(self) -> None:
         """Additive column migrations, so a db from an older SSSF still opens."""

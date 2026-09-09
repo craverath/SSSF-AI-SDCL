@@ -198,11 +198,25 @@ export interface UsageBreakdown {
   cache_read_cost: number;
   cache_write_cost: number;
   total_cost: number;
+  /**
+   * Non-dollar billing units, for a harness that bills in them instead of
+   * tokens and dollars (Kiro CLI). Never folded into `total_cost` — a credit is
+   * not a dollar. Absent on runs predating the field, and 0 on a dollar-billed
+   * harness, so a reader must treat 0 and undefined the same way.
+   */
+  credits?: number;
 }
 
 /** Parsed `agent_end` payload — closes out a call with its cost and context use. */
 export interface AgentEndPayload {
   cost?: number;
+  /**
+   * Credits billed for this phase, summed over every send it made. The whole
+   * spend of a Kiro phase lives here: that harness reports no tokens and no
+   * dollars, so a reader that only looks at `cost` and `usage.total_tokens`
+   * shows a billed phase as free.
+   */
+  credits?: number;
   /** Absent on runs predating the breakdown; `cost` alone survives there. */
   usage?: UsageBreakdown;
   /** Window occupancy after the final turn, and the model's ceiling. */

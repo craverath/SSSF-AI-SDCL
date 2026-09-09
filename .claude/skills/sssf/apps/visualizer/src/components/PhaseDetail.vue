@@ -26,6 +26,14 @@ import { fmtClock, payloadOk, ts } from '../lib/format'
 import { serverNow } from '../lib/clock'
 import { highlightJson, highlightJsonText } from '../lib/highlight'
 import { eventLabel, parseAgentStart, parseToolCall } from '../lib/events'
+import {
+  agentSpend,
+  shareOf,
+  spendFor,
+  spendTitle,
+  totalOf,
+  type BillingUnit,
+} from '../lib/spend'
 import { modelIcon, modelName } from '../lib/models'
 import { fetchPrompts, type PromptsResponse } from '../lib/api'
 import { renderMarkdown } from '../lib/markdown'
@@ -81,8 +89,19 @@ interface UsageRow {
  * Returns null for non-agent phases and for a run still in flight. Older runs
  * recorded only a lump `cost`, so the breakdown is optional and rows are built
  * from whatever was written.
+ *
+ * `credits` is carried beside the table rather than in it: a credit is not a
+ * dollar and has no token count behind it, so it cannot honestly occupy either
+ * column. `tokensReported` is false for a harness that bills in credits and
+ * reports no tokens at all (Kiro CLI) — there the table would be nothing but
+ * zeros, which reads as "this phase was free" for work that was billed.
  */
-const phaseUsage = computed<{ rows: UsageRow[]; partial: boolean } | null>(() => {
+const phaseUsage = computed<{
+  rows: UsageRow[]
+  partial: boolean
+  credits: number
+  tokensReported: boolean
+} | null>(() => {
   if (props.phase.kind !== 'agent') return null
   const end = phaseEvents.value.find((e) => e.type === 'agent_end')
   if (!end) return null
@@ -93,11 +112,15 @@ const phaseUsage = computed<{ rows: UsageRow[]; partial: boolean } | null>(() =>
     // A malformed payload is a missing panel, never a broken detail view.
   }
   const u = payload.usage
+  const credits = payload.credits ?? u?.credits ?? 0
   if (!u) {
     // Pre-breakdown run: the event's own token count and the lump cost still hold.
+    const tokens = end.tokens ?? 0
     return {
       partial: true,
-      rows: [{ label: 'total', tokens: end.tokens ?? 0, cost: payload.cost ?? 0, kind: 'total' }],
+      credits,
+      tokensReported: tokens > 0,
+      rows: [{ label: 'total', tokens, cost: payload.cost ?? 0, kind: 'total' }],
     }
   }
   const rows: UsageRow[] = [
@@ -121,7 +144,49 @@ const phaseUsage = computed<{ rows: UsageRow[]; partial: boolean } | null>(() =>
     { label: 'cache write', tokens: u.cache_write_tokens, cost: u.cache_write_cost },
     { label: 'total', tokens: u.total_tokens, cost: u.total_cost, kind: 'total' },
   )
-  return { rows, partial: false }
+  return {
+    rows,
+    partial: false,
+    credits,
+    tokensReported: u.total_tokens > 0 || u.input_tokens > 0 || u.output_tokens > 0,
+  }
+})
+
+const SPEND_CHIP: Record<BillingUnit, 'credits' | 'cost' | 'tokens' | null> = {
+  credit: 'credits',
+  dollar: 'cost',
+  token: 'tokens',
+  none: null,
+}
+
+const SPEND_FIELD: Record<BillingUnit, 'credits' | 'costUsd' | 'billedTokens' | null> = {
+  credit: 'credits',
+  dollar: 'costUsd',
+  token: 'billedTokens',
+  none: null,
+}
+
+/**
+ * This phase's agent, summed over every phase it ran in THIS session.
+ *
+ * The question a phase panel cannot answer on its own is "what is this agent
+ * costing me", and a chain calls the same agent more than once — a revise loop
+ * runs the builder twice. Derived from the session's agent_end events, so it
+ * needs no endpoint and works on runs recorded before this panel existed.
+ */
+const agentTotals = computed(() => {
+  const owner = props.phase.owner
+  if (props.phase.kind !== 'agent' || !owner) return null
+  const rows = agentSpend(props.events)
+  const mine = spendFor(rows, owner)
+  if (!mine || mine.calls === 0) return null
+  const field = SPEND_FIELD[mine.unit]
+  // Share only against agents billed in the same unit; across units it would
+  // be a percentage of two different currencies added together.
+  const peers = rows.filter((r) => r.unit === mine.unit)
+  const pct = field && peers.length > 1 ? shareOf(mine[field], totalOf(peers, field)) : 0
+  const share = pct ? `${pct < 1 ? '<1' : Math.round(pct)}% of this run` : ''
+  return { spend: mine, chip: SPEND_CHIP[mine.unit], value: field ? mine[field] : 0, share }
 })
 
 const NUM = new Intl.NumberFormat('en-US')
@@ -383,59 +448,79 @@ function togglePanel(id: string) {
         </DetailSection>
 
         <DetailSection
-          v-if="agentConfig"
-          title="agent config"
+          v-if="agentConfig || agentTotals"
+          title="agent"
           :icon="SlidersHorizontal"
           :open="openSections.has('config')"
           @toggle="toggleSection('config')"
         >
           <div class="cfg">
-            <div v-if="agentConfig.coding_agent" class="cfg-row">
-              <span class="cfg-k">coding agent</span>
-              <span class="cfg-chip">
-                <SquareTerminal class="cfg-icon" :size="18" :stroke-width="2" />
-                {{ agentConfig.coding_agent }}
+            <!-- Spend first: it is the question the phase table cannot answer,
+                 because a chain calls the same agent more than once. -->
+            <div v-if="agentTotals?.chip" class="cfg-row">
+              <span class="cfg-k">spend</span>
+              <span class="cfg-spend" :title="spendTitle(agentTotals.spend)">
+                <StatChip :kind="agentTotals.chip" :value="agentTotals.value" />
+                <span v-if="agentTotals.share" class="cfg-v dim">{{ agentTotals.share }}</span>
               </span>
             </div>
-            <div v-if="agentConfig.model" class="cfg-row">
-              <span class="cfg-k">model</span>
-              <span class="cfg-chip" :title="agentConfig.model">
-                <img v-if="modelIcon(agentConfig.model)" class="cfg-model-icon" :src="modelIcon(agentConfig.model)!" alt="" />
-                {{ modelName(agentConfig.model) }}
+            <div v-if="agentTotals" class="cfg-row">
+              <span class="cfg-k">phases run</span>
+              <span class="cfg-v">
+                {{ agentTotals.spend.calls }}
+                <span v-if="agentTotals.spend.unit === 'credit'" class="dim">
+                  · this harness reports credits only, never tokens
+                </span>
               </span>
             </div>
-            <div v-if="agentConfig.thinking" class="cfg-row">
-              <span class="cfg-k">thinking</span>
-              <span class="cfg-chip">
-                <Brain class="cfg-icon" :size="18" :stroke-width="2" />
-                {{ agentConfig.thinking }}
-              </span>
-            </div>
-            <div v-if="agentConfig.tools !== undefined" class="cfg-row">
-              <span class="cfg-k">tools</span>
-              <span v-if="agentConfig.tools === null" class="cfg-v">all tools</span>
-              <span v-else class="cfg-chips">
-                <span v-for="t in agentConfig.tools" :key="t" class="cfg-chip">{{ t }}</span>
-              </span>
-            </div>
-            <div v-if="agentConfig.harness_engineering !== undefined" class="cfg-row">
-              <span class="cfg-k">harness</span>
-              <span v-if="!agentConfig.harness_engineering?.length" class="cfg-v dim">none</span>
-              <span v-else class="cfg-chips">
-                <span v-for="h in agentConfig.harness_engineering" :key="h" class="cfg-chip">{{ h }}</span>
-              </span>
-            </div>
-            <div v-if="agentConfig.purpose" class="cfg-row">
-              <span class="cfg-k">purpose</span>
-              <span class="cfg-v">{{ agentConfig.purpose }}</span>
-            </div>
-            <div v-if="agentConfig.session_id" class="cfg-row">
-              <span class="cfg-k">session</span>
-              <span class="cfg-chip">
-                <Fingerprint class="cfg-icon" :size="18" :stroke-width="2" />
-                {{ agentConfig.session_id }}
-              </span>
-            </div>
+            <template v-if="agentConfig">
+              <div v-if="agentConfig.coding_agent" class="cfg-row">
+                <span class="cfg-k">coding agent</span>
+                <span class="cfg-chip">
+                  <SquareTerminal class="cfg-icon" :size="18" :stroke-width="2" />
+                  {{ agentConfig.coding_agent }}
+                </span>
+              </div>
+              <div v-if="agentConfig.model" class="cfg-row">
+                <span class="cfg-k">model</span>
+                <span class="cfg-chip" :title="agentConfig.model">
+                  <img v-if="modelIcon(agentConfig.model)" class="cfg-model-icon" :src="modelIcon(agentConfig.model)!" alt="" />
+                  {{ modelName(agentConfig.model) }}
+                </span>
+              </div>
+              <div v-if="agentConfig.thinking" class="cfg-row">
+                <span class="cfg-k">thinking</span>
+                <span class="cfg-chip">
+                  <Brain class="cfg-icon" :size="18" :stroke-width="2" />
+                  {{ agentConfig.thinking }}
+                </span>
+              </div>
+              <div v-if="agentConfig.tools !== undefined" class="cfg-row">
+                <span class="cfg-k">tools</span>
+                <span v-if="agentConfig.tools === null" class="cfg-v">all tools</span>
+                <span v-else class="cfg-chips">
+                  <span v-for="t in agentConfig.tools" :key="t" class="cfg-chip">{{ t }}</span>
+                </span>
+              </div>
+              <div v-if="agentConfig.harness_engineering !== undefined" class="cfg-row">
+                <span class="cfg-k">harness</span>
+                <span v-if="!agentConfig.harness_engineering?.length" class="cfg-v dim">none</span>
+                <span v-else class="cfg-chips">
+                  <span v-for="h in agentConfig.harness_engineering" :key="h" class="cfg-chip">{{ h }}</span>
+                </span>
+              </div>
+              <div v-if="agentConfig.purpose" class="cfg-row">
+                <span class="cfg-k">purpose</span>
+                <span class="cfg-v">{{ agentConfig.purpose }}</span>
+              </div>
+              <div v-if="agentConfig.session_id" class="cfg-row">
+                <span class="cfg-k">session</span>
+                <span class="cfg-chip">
+                  <Fingerprint class="cfg-icon" :size="18" :stroke-width="2" />
+                  {{ agentConfig.session_id }}
+                </span>
+              </div>
+            </template>
           </div>
         </DetailSection>
 
@@ -559,7 +644,11 @@ function togglePanel(id: string) {
           :open="openSections.has('cost')"
           @toggle="toggleSection('cost')"
         >
-          <table class="usage">
+          <div v-if="phaseUsage.credits" class="billed" title="Credits billed for this phase, every attempt included. A credit is not a dollar: its exchange rate is a per-model multiplier the harness does not publish, so it is never folded into the cost column.">
+            <span class="b-k">credits</span>
+            <span class="b-v">{{ phaseUsage.credits.toFixed(4) }} cr</span>
+          </div>
+          <table v-if="phaseUsage.tokensReported || !phaseUsage.credits" class="usage">
             <thead>
               <tr>
                 <th class="u-k"></th>
@@ -580,6 +669,10 @@ function togglePanel(id: string) {
               </tr>
             </tbody>
           </table>
+          <p v-else class="faint u-note">
+            this harness reports no per-session token count and no dollars — the credits above are
+            the whole bill for this phase
+          </p>
           <p v-if="phaseUsage.partial" class="faint u-note">
             this run predates the per-component breakdown — only the total was recorded
           </p>
@@ -1052,6 +1145,39 @@ h3:first-child {
 }
 
 /* ── cost ── */
+
+/* Credits sit above the token table, not inside it — different unit, no
+   token count behind them. */
+.billed {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 2px 9px;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 8px;
+}
+
+.billed .b-k {
+  font-size: 15px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.billed .b-v {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 17px;
+  color: var(--text);
+}
+
+.cfg-spend {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 
 .usage {
   width: 100%;

@@ -17,6 +17,15 @@ import { axisTicks, fmtDate, payloadOk, ts } from '../lib/format'
 import { serverNow } from '../lib/clock'
 import { modelIcon, modelName } from '../lib/models'
 import { agentColor, hexAlpha, parseAgentStart } from '../lib/events'
+import {
+  agentSpend,
+  shareOf,
+  spendFor,
+  spendTitle,
+  totalOf,
+  type AgentSpend,
+  type BillingUnit,
+} from '../lib/spend'
 import { navigate, phaseCrumb } from '../lib/router'
 import StatusChip from './StatusChip.vue'
 import StatChip from './StatChip.vue'
@@ -112,6 +121,8 @@ interface Lane {
   model: string | null
   /** Context-window occupancy, or null while unknown (running / old db). */
   context: LaneContext | null
+  /** What this agent has billed so far, in its harness's own unit. */
+  spend: AgentSpend | null
   metaLines: string[]
   color: string
   kind: PhaseKind
@@ -163,6 +174,48 @@ const ownerStart = computed<Record<string, AgentStartPayload>>(() => {
   return meta
 })
 
+// ── Spend per agent ──────────────────────────────────────────────────────────
+// Derived from the agent_end events already polled, so it needs no endpoint and
+// works on runs recorded before this existed. See lib/spend.ts for why the unit
+// travels with the number instead of being normalized away.
+
+const spendRows = computed(() => agentSpend(events.value))
+
+const SPEND_CHIP: Record<BillingUnit, 'credits' | 'cost' | 'tokens' | null> = {
+  credit: 'credits',
+  dollar: 'cost',
+  token: 'tokens',
+  none: null,
+}
+
+const SPEND_FIELD: Record<BillingUnit, 'credits' | 'costUsd' | 'billedTokens' | null> = {
+  credit: 'credits',
+  dollar: 'costUsd',
+  token: 'billedTokens',
+  none: null,
+}
+
+/** The value the lane's chip shows, in whatever unit that agent was billed in. */
+function spendValue(spend: AgentSpend): number {
+  const field = SPEND_FIELD[spend.unit]
+  return field ? spend[field] : 0
+}
+
+/**
+ * This agent's share of the session, compared only against agents billed in the
+ * SAME unit. A percentage across two currencies would be meaningless, and a
+ * sole payer in its unit is always 100% — which tells you nothing, so it is
+ * left off rather than shown.
+ */
+function spendShare(spend: AgentSpend): string {
+  const field = SPEND_FIELD[spend.unit]
+  if (!field) return ''
+  const peers = spendRows.value.filter((r) => r.unit === spend.unit)
+  const pct = shareOf(spend[field], totalOf(peers, field))
+  if (!pct || pct >= 99.5) return ''
+  return pct < 1 ? '<1%' : `${Math.round(pct)}%`
+}
+
 const lanes = computed<Lane[]>(() => {
   const ph = phases.value
   const agentOwners: string[] = []
@@ -176,6 +229,7 @@ const lanes = computed<Lane[]>(() => {
       label: session.value?.engineer ?? 'engineer',
       model: null,
       context: null,
+      spend: null,
       metaLines: ['engineer'],
       color: ENGINEER_COLOR,
       kind: 'engineer' as const,
@@ -188,6 +242,7 @@ const lanes = computed<Lane[]>(() => {
       label: 'code',
       model: null,
       context: null,
+      spend: null,
       metaLines: ['workspace'],
       color: CODE_COLOR,
       kind: 'code' as const,
@@ -204,6 +259,7 @@ const lanes = computed<Lane[]>(() => {
       // phase detail's agent config section.
       model: info?.model ?? start?.model ?? null,
       context: laneContext(info),
+      spend: spendFor(spendRows.value, owner),
       metaLines: [],
       color: agentColor(info?.color, start?.color, i),
       kind: 'agent' as const,
@@ -436,12 +492,12 @@ function selectPhase(p: Phase) {
       <StatusChip :status="session.status ?? 'fail'" />
       <span class="dim">started {{ fmtDate(session.started_at) }}</span>
       <span class="run-stats">
-        <StatChip kind="cost" :value="session.total_cost" />
+        <StatChip v-if="session.total_cost" kind="cost" :value="session.total_cost" />
         <StatChip v-if="session.total_credits" kind="credits" :value="session.total_credits" />
         <StatChip kind="runtime" :value="sessionDurationMs" />
-        <StatChip kind="tokens" :value="session.total_tokens" />
-        <StatChip kind="read" :value="usage.read" />
-        <StatChip kind="written" :value="usage.written" />
+        <StatChip v-if="session.total_tokens" kind="tokens" :value="session.total_tokens" />
+        <StatChip v-if="usage.read" kind="read" :value="usage.read" />
+        <StatChip v-if="usage.written" kind="written" :value="usage.written" />
       </span>
     </div>
 
@@ -469,6 +525,20 @@ function selectPhase(p: Phase) {
           <span v-if="lane.model" class="lane-meta lane-model" :title="lane.model">
             <img v-if="modelIcon(lane.model)" class="model-icon" :src="modelIcon(lane.model)!" alt="" />
             {{ modelName(lane.model) }}
+          </span>
+          <span
+            v-if="lane.spend && SPEND_CHIP[lane.spend.unit]"
+            class="lane-spend"
+            :title="spendTitle(lane.spend)"
+          >
+            <StatChip
+              :kind="SPEND_CHIP[lane.spend.unit]!"
+              compact
+              :value="spendValue(lane.spend)"
+            />
+            <span v-if="spendShare(lane.spend)" class="spend-share">{{
+              spendShare(lane.spend)
+            }}</span>
           </span>
           <span
             v-if="lane.context"
@@ -679,6 +749,20 @@ function selectPhase(p: Phase) {
   height: 17px;
   flex: none;
   object-fit: contain;
+}
+
+/* Spend in the harness's own unit, under the model. */
+.lane-spend {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.spend-share {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--faint);
 }
 
 /* Context occupancy — label row over a thin track, under the model. */

@@ -71,6 +71,18 @@ sessions:
 phases ADW_ID:
     @sqlite3 {{db}} "select seq, name, kind, owner, status, attempt from phases where adw_id='{{ADW_ID}}' order by seq;"
 
+# Spend per agent, in the unit its harness actually bills in. A mixed roster
+# bills in two currencies at once, so the unit column is not decoration: never
+# add a credit row to a dollar row.
+
+# what each agent cost in a run: just spend <adw_id>
+spend ADW_ID:
+    @sqlite3 -header -column {{db}} "select agent, coding_agent, unit, count(*) as phases, round(sum(credits),4) as credits, round(sum(cost_usd),4) as usd, sum(billed_tokens) as tokens, sum(input_tokens) as tok_in, sum(output_tokens) as tok_out, round(sum(seconds),1) as secs from phase_usage where adw_id='{{ADW_ID}}' group by agent, coding_agent, unit order by credits desc, tokens desc;"
+
+# spend per agent across the last runs, to see who is actually costing you
+spend-all:
+    @sqlite3 -header -column {{db}} "select agent, coding_agent, unit, count(*) as phases, round(sum(credits),4) as credits, round(sum(cost_usd),4) as usd, sum(billed_tokens) as tokens from phase_usage group by agent, coding_agent, unit order by credits desc, tokens desc;"
+
 # the live event tail: just tail <adw_id>
 tail ADW_ID:
     @sqlite3 {{db}} "select rowid, type, name, started_at from events where adw_id='{{ADW_ID}}' order by rowid desc limit 25;"

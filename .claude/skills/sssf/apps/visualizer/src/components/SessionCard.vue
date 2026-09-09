@@ -242,10 +242,10 @@ const hiddenRowCount = computed(() =>
       <span class="dim">{{ fmtDate(session.started_at) }}</span>
     </div>
     <div class="card-stats">
-      <StatChip kind="cost" :value="session.total_cost" />
+      <StatChip v-if="session.total_cost" kind="cost" :value="session.total_cost" />
       <StatChip v-if="session.total_credits" kind="credits" :value="session.total_credits" />
       <StatChip kind="runtime" :value="durationMs" />
-      <StatChip kind="tokens" :value="session.total_tokens" />
+      <StatChip v-if="session.total_tokens" kind="tokens" :value="session.total_tokens" />
     </div>
   </a>
 </template>
