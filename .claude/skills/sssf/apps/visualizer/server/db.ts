@@ -295,7 +295,8 @@ export class SssfDb {
       append(row.adw_id, {
         adw_id: row.adw_id,
         agent: row.agent,
-        coding_agent: null,
+        // The harness is on the start payload, so a running lane can name it.
+        coding_agent: payload.coding_agent ?? null,
         model: payload.model ?? null,
         session_id: payload.session_id ?? null,
         color: payload.color ?? null,

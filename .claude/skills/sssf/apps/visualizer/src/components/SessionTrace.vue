@@ -16,6 +16,7 @@ import { fetchEnvelopes, fetchEvents, fetchGates, fetchSession } from '../lib/ap
 import { axisTicks, fmtDate, payloadOk, ts } from '../lib/format'
 import { serverNow } from '../lib/clock'
 import { modelIcon, modelName } from '../lib/models'
+import { harnessLabel, harnessTitle } from '../lib/harness'
 import { agentColor, hexAlpha, parseAgentStart } from '../lib/events'
 import {
   agentSpend,
@@ -119,6 +120,8 @@ interface Lane {
   label: string
   /** Model driving this lane's agent — rendered with its provider icon. */
   model: string | null
+  /** The harness id from the roster (`kiro_cli`), shown beside the model. */
+  harness: string | null
   /** Context-window occupancy, or null while unknown (running / old db). */
   context: LaneContext | null
   /** What this agent has billed so far, in its harness's own unit. */
@@ -228,6 +231,7 @@ const lanes = computed<Lane[]>(() => {
       id: 'engineer',
       label: session.value?.engineer ?? 'engineer',
       model: null,
+      harness: null,
       context: null,
       spend: null,
       metaLines: ['engineer'],
@@ -241,6 +245,7 @@ const lanes = computed<Lane[]>(() => {
       id: 'code',
       label: 'code',
       model: null,
+      harness: null,
       context: null,
       spend: null,
       metaLines: ['workspace'],
@@ -258,6 +263,9 @@ const lanes = computed<Lane[]>(() => {
       // The model is the lane's whole story; thinking level lives in the
       // phase detail's agent config section.
       model: info?.model ?? start?.model ?? null,
+      // The harness is the other half of "who ran this": agent_start carries it
+      // live, the agent_sessions row keeps it after the run.
+      harness: info?.coding_agent ?? start?.coding_agent ?? null,
       context: laneContext(info),
       spend: spendFor(spendRows.value, owner),
       metaLines: [],
@@ -522,9 +530,16 @@ function selectPhase(p: Phase) {
             <component :is="KIND_ICONS[lane.kind]" class="lane-icon" :size="22" :stroke-width="2" />
             {{ lane.label }}
           </span>
-          <span v-if="lane.model" class="lane-meta lane-model" :title="lane.model">
+          <span
+            v-if="lane.model || lane.harness"
+            class="lane-meta lane-model"
+            :title="lane.model ?? undefined"
+          >
             <img v-if="modelIcon(lane.model)" class="model-icon" :src="modelIcon(lane.model)!" alt="" />
-            {{ modelName(lane.model) }}
+            <span v-if="lane.model" class="model-name">{{ modelName(lane.model) }}</span>
+            <span v-if="lane.harness" class="lane-harness" :title="harnessTitle(lane.harness)">{{
+              harnessLabel(lane.harness)
+            }}</span>
           </span>
           <span
             v-if="lane.spend && SPEND_CHIP[lane.spend.unit]"
@@ -742,6 +757,24 @@ function selectPhase(p: Phase) {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+}
+
+.model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The CLI that ran the turn, beside the model — deliberately small: it answers
+   "which harness" without competing with the agent name or the model. */
+.lane-harness {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--faint);
 }
 
 .model-icon {
