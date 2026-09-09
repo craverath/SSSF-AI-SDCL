@@ -104,10 +104,40 @@ def stamp(
     stamped.append(str(dest))
 
 
+def clone_ignore_entry(root: Path) -> str | None:
+    """The installer's own clone, when it sits INSIDE the repo being stamped.
+
+    The documented install clones the factory to `sssf/` at the target repo
+    root, which leaves a second checkout inside the working tree. Ignoring it is
+    not cosmetic: every chain that ends in a commit phase runs `git add -A`, so
+    an unignored clone lands in the builder's commit under the builder's
+    message, and `permissions.snapshot()` lists untracked files, so it also
+    reads as an unauthorized agent write and gets rolled back file by file.
+    That is the same breach vector `node_modules/` is ignored for, which is why
+    this is written for you rather than left to a note in the README.
+
+    None when the clone lives outside the repo, which needs no entry, and when
+    the repo IS the clone — the example branch installs into itself.
+    """
+    clone_root = SKILL_ROOT.parents[2]
+    resolved = root.resolve()
+    if clone_root == resolved:
+        return None
+    try:
+        relative = clone_root.relative_to(resolved)
+    except ValueError:
+        return None
+    return f"{relative.as_posix()}/"
+
+
 def ensure_gitignore(root: Path, stamped: list[str]) -> None:
     gitignore = root / ".gitignore"
     existing = gitignore.read_text().splitlines() if gitignore.exists() else []
-    missing = [e for e in GITIGNORE_ENTRIES if e not in existing]
+    entries = list(GITIGNORE_ENTRIES)
+    clone = clone_ignore_entry(root)
+    if clone:
+        entries.append(clone)
+    missing = [e for e in entries if e not in existing]
     if missing:
         with gitignore.open("a") as f:
             f.write("\n# sssf runtime\n" + "\n".join(missing) + "\n")

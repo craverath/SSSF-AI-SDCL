@@ -145,6 +145,54 @@ def test_visualizer_recipe_probes_every_integration():
         assert f'skill_dir="{path}"' in template
 
 
+def test_gitignores_its_own_clone_when_it_lives_inside_the_repo(tmp_path):
+    """The documented install clones the factory to `sssf/` at the target repo
+    root, which puts a second checkout in the working tree. Two mechanisms then
+    act on it: a commit phase's `git add -A` commits it under the builder's
+    message, and permissions.snapshot() lists untracked files, so it reads as an
+    unauthorized agent write and enforce() rolls it back file by file — the same
+    breach `node_modules/` is ignored for. Asserted through real git output
+    rather than the constant, because a correct entry in the wrong place still
+    leaves the breach in place."""
+    installer = load_installer()
+    installer.SKILL_ROOT = tmp_path / "sssf/.claude/skills/sssf"
+    assert installer.clone_ignore_entry(tmp_path) == "sssf/"
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    installer.ensure_gitignore(tmp_path, [])
+    clone_file = installer.SKILL_ROOT / "templates/justfile"
+    clone_file.parent.mkdir(parents=True, exist_ok=True)
+    clone_file.write_text("default:\n    @just --list\n")
+
+    untracked = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+
+    assert [p for p in untracked if p.startswith("sssf/")] == []
+
+
+def test_clone_outside_the_repo_adds_no_gitignore_entry(tmp_path):
+    """An entry for a path that is not in the repo would ignore nothing, and a
+    relative one would ignore the wrong directory."""
+    installer = load_installer()
+    installer.SKILL_ROOT = tmp_path / "elsewhere/.claude/skills/sssf"
+    repo = tmp_path / "project"
+    repo.mkdir()
+    assert installer.clone_ignore_entry(repo) is None
+
+
+def test_repo_that_is_the_factory_clone_adds_no_gitignore_entry(tmp_path):
+    """The example branch installs into the clone itself, where the entry would
+    be `./` and would ignore the entire repository."""
+    installer = load_installer()
+    installer.SKILL_ROOT = tmp_path / ".claude/skills/sssf"
+    assert installer.clone_ignore_entry(tmp_path) is None
+
+
 def test_migrates_legacy_visualizer_path_without_replacing_justfile(tmp_path):
     justfile = tmp_path / "justfile"
     justfile.write_text(

@@ -5,10 +5,11 @@
 ## Run it
 
 ```bash
-uv run <skill-dir>/scripts/install.py
+# from the target repo root, with the factory cloned into sssf/
+uv run sssf/install.py
 ```
 
-Run from the **target repo root** — the cwd is where everything lands. The repository-local skill directory is `.claude/skills/sssf` for Claude Code, `.agents/skills/sssf` for Codex, and `.kiro/skills/sssf` for Kiro CLI. The installer preserves the integration from which it is invoked.
+Run from the **target repo root** — the cwd is where everything lands. The documented clone puts the factory at `sssf/` inside that repo, so it travels with the project and `git -C sssf pull` updates it; a clone anywhere else works the same, only the path changes. Once the skill is stamped, the in-repo copy is the installer to re-run: `.claude/skills/sssf` for Claude Code, `.agents/skills/sssf` for Codex, `.kiro/skills/sssf` for Kiro CLI, at `<skill-dir>/scripts/install.py`. The installer preserves the integration from which it is invoked.
 
 ## What gets stamped
 
@@ -38,7 +39,7 @@ Re-running is safe. `install.py` preserves existing files — your config, promp
 1. **CLIs** — the starter roster needs authenticated `kiro-cli` (planner, builder, reviewer) and `agy` (scout, documenter) commands on PATH. Set `KIRO_PATH` or `AGY_PATH` in `.env` only when the executable is elsewhere.
 2. **Models** — confirm `kiro-cli chat --list-models --format json` offers `claude-opus-5`, `claude-sonnet-5`, and `gpt-5.6-sol`, and that `agy models` offers `gemini-3.8-flash-medium`, for the logged-in accounts. Both are checked by `agents.validate()` before anything spawns.
 3. **Env** — `.env` is optional for the starter roster. Copy `.env.sample` only when adding path overrides or Pi provider keys.
-4. **Gitignore** — `install.py` appends `adws/adw_data/sessions/`, `adws/adw_data/sssf.db*`, `.env`, `__pycache__/`, `*.pyc`, and `node_modules/` for you; confirm they landed. They are runtime, bytecode, dependencies, or secrets, and must never be committed. `node_modules/` is not cosmetic: `permissions.snapshot()` lists untracked files, so an unignored dependency tree that appears mid-run is attributed to the agent and rolled back file by file. The stamped visualizer carries its own `.gitignore` for the same reason.
+4. **Gitignore** — `install.py` appends `adws/adw_data/sessions/`, `adws/adw_data/sssf.db*`, `.env`, `__pycache__/`, `*.pyc`, and `node_modules/` for you, plus its own clone directory (`sssf/`) whenever that clone sits inside the repo being stamped; confirm they landed. They are runtime, bytecode, dependencies, secrets, or a second checkout, and must never be committed. The last three are not cosmetic: `permissions.snapshot()` lists untracked files, so an unignored dependency tree or factory clone that appears mid-run is attributed to the agent and rolled back file by file, and `git add -A` in a commit phase would otherwise commit it. The stamped visualizer carries its own `.gitignore` for the same reason.
 5. **Git repo** — ADWs that end in a commit phase call `git_helper.commit_all`, which raises if the cwd is not a git repository. Run `git init` and make a first commit before using `adw_plan_build.py`, `adw_plan_build_test.py`, or `adw_simple_sdlc.py`. `adw_document.py` needs one too: it measures the change with `git diff` against a base ref (`main` by default, `--base` to override).
 6. **Smoke test** — `just demo` runs two cheap read-only workflows back to back, or run the smallest ADW directly:
 

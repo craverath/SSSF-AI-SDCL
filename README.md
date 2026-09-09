@@ -28,19 +28,19 @@ Five steps, from a clone to a live trace. Everything after step 1 runs from the 
 
 **Prereqs:** [`uv`](https://docs.astral.sh/uv/), `sqlite3`, the CLI behind every agent in your roster (`pi`, `claude`, `codex`, `kiro-cli`, or `agy`) already authenticated, and [`bun`](https://bun.sh) for the visualizer in step 4.
 
-**1. Clone the factory**, outside the project it will operate on.
+**1. Clone the factory into the repo it will operate on**, as `sssf/`.
 
 ```bash
-git clone --depth 1 https://github.com/craverath/SSSF-AI-SDCL.git ~/sssf
+cd ~/code/your-project
+git clone --depth 1 https://github.com/craverath/SSSF-AI-SDCL.git sssf
 ```
 
-The installer resolves its templates relative to its own file, so it needs a real clone on disk. There is no curl-to-shell form.
+The installer resolves its templates relative to its own file, so it needs a real clone on disk. There is no curl-to-shell form. Keeping the clone in the repo means the factory travels with the project and updating it is `git -C sssf pull`; `install.py` adds `sssf/` to your `.gitignore`, because a second checkout inside the working tree would otherwise be committed by the first commit phase and read as an agent write. Cloning elsewhere still works — pass whatever path you used in step 2.
 
 **2. Stamp it into your repo**, naming the host that will operate it.
 
 ```bash
-cd ~/code/your-project
-uv run ~/sssf/install.py --integration kiro      # or: claude | codex | none
+uv run sssf/install.py --integration kiro      # or: claude | codex | none
 ```
 
 `--integration` is the host *you* drive SSSF from, not the harness your agents run on. Omit it and you get `claude`. Any chain that ends in a commit phase runs `git add -A`, so if the target is not a git repo yet, `git init` and make one commit first.
@@ -106,8 +106,8 @@ Run the repository installer from the **target repo root** and select the host t
 **Prereqs:** [`uv`](https://docs.astral.sh/uv/), `sqlite3`, and the CLI used by each agent in your roster (`pi`, `claude`, `codex`, `kiro-cli`, or `agy`), already authenticated. [`bun`](https://bun.sh) is only needed for the visualizer.
 
 ```bash
-# from the target repo root
-uv run /path/to/super-simple-software-factory/install.py --integration codex
+# from the target repo root, with the factory cloned into sssf/
+uv run sssf/install.py --integration codex
 # or: --integration claude
 # or: --integration kiro
 # or: --integration none
@@ -418,7 +418,7 @@ Honest edges, because knowing them is cheaper than discovering them.
 | `harness_engineering` set on any non-Pi agent | It's Pi-only (pi extensions); `agents.validate()` fails objectively | Clear the list, or set `coding_agent: pi` |
 | An `antigravity` agent dies mid-turn | `agy` returns `Internal error encountered.` or `The stream was interrupted.` and the phase fails. Measured in 5 of 9 identical runs inside a ~380-file repo, 0 of 4 in a small one — it ingests the workspace, and a big context makes the upstream stream unreliable | Re-run with `--adw-id` to retry only the failed phase. SSSF will not auto-resume: a stream-killed turn can poison the conversation so every later request on it fails |
 | A `kiro_cli` phase reports 0 tokens | Correct, not a bug: Kiro's docs state per-session token counts are unavailable. It bills credits, shown by `just sessions`, the visualizer, and the console | Read credits, not tokens, for Kiro. A mixed roster's `total_tokens` undercounts by design |
-| The first chain in a fresh repo commits the whole factory | `commit_all` is `git add -A`, so anything the install left untracked lands in the builder's commit under the builder's message | Commit the stamped factory yourself right after `install.py`, before the first chain |
+| The first chain in a fresh repo commits the whole factory | `commit_all` is `git add -A`, so anything the install left untracked lands in the builder's commit under the builder's message. The `sssf/` clone itself is gitignored for you; the stamped files are not, because they are yours | Commit the stamped factory yourself right after `install.py`, before the first chain |
 
 Also missing on purpose, so you know what to add: this runs on your current branch. For real work you want a branch per run, a sandbox around the agent, and a merge step at the end.
 
