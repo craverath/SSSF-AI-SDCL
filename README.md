@@ -22,6 +22,57 @@ Everyone can get an agent to write code once. Almost nobody gets the same result
 
 ---
 
+## Quickstart
+
+Five steps, from a clone to a live trace. Everything after step 1 runs from the **root of the repo you want the factory in**.
+
+**Prereqs:** [`uv`](https://docs.astral.sh/uv/), `sqlite3`, the CLI behind every agent in your roster (`pi`, `claude`, `codex`, `kiro-cli`, or `agy`) already authenticated, and [`bun`](https://bun.sh) for the visualizer in step 4.
+
+**1. Clone the factory**, outside the project it will operate on.
+
+```bash
+git clone --depth 1 https://github.com/craverath/SSSF-AI-SDCL.git ~/sssf
+```
+
+The installer resolves its templates relative to its own file, so it needs a real clone on disk. There is no curl-to-shell form.
+
+**2. Stamp it into your repo**, naming the host that will operate it.
+
+```bash
+cd ~/code/your-project
+uv run ~/sssf/install.py --integration kiro      # or: claude | codex | none
+```
+
+`--integration` is the host *you* drive SSSF from, not the harness your agents run on. Omit it and you get `claude`. Any chain that ends in a commit phase runs `git add -A`, so if the target is not a git repo yet, `git init` and make one commit first.
+
+**3. Assign a harness and a model to each agent**, from inside that host:
+
+```
+/sssf-pick-models      # Claude Code, Kiro CLI
+$sssf-pick-models      # Codex
+```
+
+The starter roster names the models that were good the week it was written, so this is the first thing worth deciding for yourself. The skill carries the model tables for all five harnesses, shows what each role is buying, and writes `sssf.config.yaml` with the keys a harness switch forces — the `tools: null` that codex, kiro_cli, and antigravity all require, and that a hand edit usually gets wrong.
+
+**4. Open the trace UI in a second terminal** and leave it up.
+
+```bash
+just obs      # installs the visualizer deps on first run, UI on :4601, api on :4600
+```
+
+**5. Run the smoke test in the first terminal** and watch the phases land live.
+
+```bash
+just demo         # two cheap read-only runs, end to end
+just sessions     # what just happened
+```
+
+Green means the whole path works: config validated, a harness ran, the envelope parsed, and events landed in `adws/adw_data/sssf.db`. Fix it here before composing anything larger, because every multi-agent chain rides this exact path.
+
+Two things to do before the first chain that writes code: commit the stamped factory (`git add -A && git commit -m "stamp sssf"`), because the commit phase is `git add -A` and would otherwise hand the whole install to the builder under the builder's message; and wire your real commands into `adws/adw_modules/quality.py`, which ships placeholders that exit 0.
+
+---
+
 ## Why this exists
 
 <p align="center">
@@ -48,7 +99,7 @@ The bill for skipping this is not only tokens. It is cost, speed, and consistenc
 
 ---
 
-## Install
+## Install in detail
 
 Run the repository installer from the **target repo root** and select the host that should operate SSSF. This integration choice does not change the `coding_agent` configured for any workflow agent.
 
@@ -61,14 +112,8 @@ uv run /path/to/super-simple-software-factory/install.py --integration codex
 # or: --integration kiro
 # or: --integration none
 
-kiro-cli --version                               # planner, builder, reviewer
-agy --version                                    # scout, documenter
-git init && git add -A && git commit -m "stamp sssf"   # commit the factory BEFORE the first chain
-
-# smoke test: two cheap read-only runs, end to end
-just demo
-just sessions              # what just happened
-just obs                   # the trace UI, needs bun
+kiro-cli --version         # planner, builder, reviewer on the starter roster
+agy --version              # scout, documenter
 
 # no just? every recipe is one line. the raw form of `just demo` is:
 uv run adws/adw_prompt.py "reply with a one-line summary of this repo" --agent scout
@@ -88,8 +133,6 @@ just sssf specs/YYYY-MM-DD-<slug>.md
 ```
 
 Re-running `install.py` is safe. It preserves existing files, applies only narrowly defined migrations for obsolete generated paths, and reports what it skipped. `--force` refreshes stamped code and the selected integration, but it overwrites **all** stamped files including your `sssf.config.yaml` and your prompts, so commit first.
-
-Green on the smoke test means the whole path works: config validated, a harness ran, the envelope parsed, and events landed in `adws/adw_data/sssf.db`. Fix it there before composing anything larger, because every multi-agent chain rides this exact path.
 
 ### Credentials
 

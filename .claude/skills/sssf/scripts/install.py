@@ -221,15 +221,27 @@ def main() -> int:
     if skipped:
         print(f"  skipped (already exist, use --force to overwrite): {len(skipped)}")
     print("\nnext steps:")
-    print("  1. cp .env.sample .env   # then set the key(s) your roster needs")
+    step = 1
+    print(f"  {step}. cp .env.sample .env   # then set the key(s) your roster needs")
+    # The starter roster names models, not decisions. Picking the harness and
+    # model per agent is the first thing worth deciding, and the companion skill
+    # writes the keys a harness switch forces, which a hand edit gets wrong.
+    if integration != "none":
+        prefix = "$" if integration == "codex" else "/"
+        step += 1
+        print(f"  {step}. {prefix}sssf-pick-models     # a harness + model per agent, from your host")
+    step += 1
+    print(f"  {step}. just obs              # the trace UI in a second terminal, needs bun")
+    step += 1
+    print(f"  {step}. just demo             # two cheap read-only runs, end to end")
+    step += 1
+    print(f"  {step}. just sessions         # what just happened")
     # Any chain ending in a commit phase runs `git add -A`, so whatever this
     # install left untracked would land in the builder's commit under the
     # builder's message. Committing here keeps the factory out of it.
-    print("  2. git add -A && git commit -m 'stamp sssf'   # BEFORE the first chain")
-    print("  3. just demo             # two cheap read-only runs, end to end")
-    print("  4. just sessions         # what just happened")
-    print("  5. just obs              # the trace UI, needs bun")
-    print("\n  no just? the raw form of step 3 is:")
+    step += 1
+    print(f"  {step}. git add -A && git commit -m 'stamp sssf'   # BEFORE the first chain")
+    print("\n  no just? the raw form of the demo is:")
     print('     uv run adws/adw_prompt.py "say hello" --agent scout')
     return 0
 
